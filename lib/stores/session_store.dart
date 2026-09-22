@@ -1,0 +1,234 @@
+import 'package:flutter/foundation.dart';
+
+import '../api/api_client.dart';
+import '../api/auth_box.dart';
+import '../local/local_store.dart';
+import '../models/models.dart';
+
+/// Connection + authentication state — mirrors Swift `SessionStore`.
+class SessionStore extends ChangeNotifier {
+  final LocalStore local;
+  late final APIClient api;
+
+  Future<void> Function()? onSigningOut;
+
+  String _baseURL;
+  String _proxyCookie;
+  bool ready = false;
+  bool authed = false;
+  String? accountId;
+  bool setupRequired = false;
+  String role = 'guest';
+  String nickname = 'Musix';
+  String? avatarUrl;
+  String? headerThumb;
+  Map<String, BindingSummary> bindings = {};
+  String? notice;
+
+  SessionStore({required this.local})
+      : _baseURL = APIClient.normalize(local.prefs.baseURL),
+        _proxyCookie = local.prefs.proxyCookie {
+    api = APIClient(baseURL: _baseURL);
+    api.updateProxyCookie(local.prefs.proxyCookie);
+    AuthBox.shared.set(proxyCookie: local.prefs.proxyCookie);
+    api.onTokenChange = _handleSessionTokenChange;
+    _restore();
+  }
+
+  String get baseURL => _baseURL;
+  set baseURL(String value) {
+    final changed = APIClient.normalize(_baseURL) != APIClient.normalize(value);
+    _baseURL = value;
+    if (changed) accountId = null;
+    local.setBaseURL(value);
+    api.updateBaseURL(value);
+    notifyListeners();
+  }
+
+  String get proxyCookie => _proxyCookie;
+  set proxyCookie(String value) {
+    _proxyCookie = value;
+    local.setProxyCookie(value);
+    api.updateProxyCookie(value);
+    notifyListeners();
+  }
+
+  void _restore() {
+    final token = local.prefs.sessionToken;
+    api.setToken(token);
+    if (token.isEmpty || !local.prefs.authedCached) {
+      // Show the login screen immediately while bootstrap probes the server.
+      // A fresh install otherwise appears frozen for the full network timeout.
+      ready = true;
+      return;
+    }
+    authed = true;
+    role = local.prefs.role;
+    bindings = local.loadBindings();
+    ready = true;
+  }
+
+  Future<void> apply(Me me) async {
+    if (me.authed != true) await _notifySigningOut();
+    authed = me.authed ?? false;
+    accountId = authed ? me.accountId : null;
+    setupRequired = me.setupRequired ?? false;
+    role = me.role ?? 'guest';
+    nickname = me.nickname ?? 'Musix';
+    avatarUrl = me.avatarUrl;
+    headerThumb = me.headerThumb;
+    bindings = me.bindings ?? {};
+    if (authed) {
+      local.setSession(token: AuthBox.shared.snapshot().token, me: me);
+    } else {
+      api.clearToken();
+      local.setSession(token: '', me: me);
+    }
+    notifyListeners();
+  }
+
+  Future<void> bootstrap() async {
+    try {
+      final me = await api.getJson('/api/me', Me.fromJson);
+      await apply(me);
+    } catch (e) {
+      if ((e is ApiError && e.status == 401) || !authed) {
+        await _clearAuthenticationPreservingConnection();
+      }
+    }
+    ready = true;
+    notifyListeners();
+  }
+
+  Future<void> login({required String password}) async {
+    api.updateBaseURL(_baseURL);
+    final path = setupRequired ? '/api/auth/setup' : '/api/auth/login';
+    final me = await api.postJson(path, Me.fromJson, json: {'password': password});
+    await apply(me);
+  }
+
+  Future<void> refreshBindings() async {
+    try {
+      final box = await api.getJson('/api/me/bindings', BindingsBox.fromJson);
+      bindings = box.bindings ?? bindings;
+      local.setSession(
+        token: AuthBox.shared.snapshot().token,
+        me: Me(setupRequired: setupRequired, authed: authed, role: role, bindings: bindings),
+      );
+      notifyListeners();
+    } catch (_) {}
+  }
+
+  /// Local-only logout — mirrors Swift `logout()`.
+  Future<void> logout() async {
+    await _notifySigningOut();
+    api.clearToken();
+    local.setSession(token: '', me: null);
+    authed = false;
+    accountId = null;
+    role = 'guest';
+    nickname = 'Musix';
+    avatarUrl = null;
+    headerThumb = null;
+    bindings = {};
+    notifyListeners();
+  }
+
+  /// Cache-first page fetch — mirrors Swift `fetchPage`.
+  Future<T?> fetchPage<T>(String path, {required String cacheKey, required T Function(Map<String, dynamic>) factory}) async {
+    try {
+      final body = await api.getRawBody(path);
+      final value = APIClient.decodeCached(body, factory);
+      local.savePageRaw(cacheKey, body);
+      return value ?? peekPage(cacheKey, factory);
+    } catch (_) {
+      return local.decodePage(cacheKey, factory);
+    }
+  }
+
+  T? peekPage<T>(String key, T Function(Map<String, dynamic>) factory) =>
+      local.decodePage(key, factory);
+
+  Future<Playlist?> fetchFullPlatformPlaylist(
+    String platform,
+    String id, {
+    required String cacheKey,
+    bool refresh = false,
+  }) async {
+    const pageSize = 80;
+    final encodedPlatform = Uri.encodeComponent(platform);
+    final encodedId = Uri.encodeComponent(id);
+    final firstQuery = <String>[
+      'limit=$pageSize',
+      if (refresh) 'refresh=true',
+    ].join('&');
+    final playlist = await fetchPage(
+      '/api/playlists/$encodedPlatform/$encodedId?$firstQuery',
+      cacheKey: cacheKey,
+      factory: Playlist.fromJson,
+    );
+    if (playlist == null) return null;
+
+    final tracks = <Track>[];
+    final trackKeys = <String>{};
+    void append(Iterable<Track> pageTracks) {
+      for (final track in pageTracks) {
+        if (track.title.isNotEmpty && trackKeys.add(track.key)) {
+          tracks.add(track);
+        }
+      }
+    }
+
+    append(playlist.tracks ?? const <Track>[]);
+    final visitedCursors = <String>{};
+    var cursor = playlist.nextCursor;
+    var pageIndex = 1;
+    while (cursor != null && cursor.isNotEmpty && visitedCursors.add(cursor)) {
+      final page = await fetchPage(
+        '/api/playlists/$encodedPlatform/$encodedId?cursor=${Uri.encodeComponent(cursor)}&limit=$pageSize',
+        cacheKey: '$cacheKey.page.$pageIndex',
+        factory: Playlist.fromJson,
+      );
+      if (page == null) break;
+      final previousCount = tracks.length;
+      append(page.tracks ?? const <Track>[]);
+      if (tracks.length == previousCount) break;
+      cursor = page.nextCursor;
+      pageIndex += 1;
+    }
+
+    playlist.tracks = tracks;
+    if ((playlist.trackCount ?? 0) < tracks.length) {
+      playlist.trackCount = tracks.length;
+    }
+    playlist.nextCursor = cursor;
+    return playlist;
+  }
+
+  void _handleSessionTokenChange(String token) {
+    if (AuthBox.shared.snapshot().token != token) return;
+    if (local.prefs.sessionToken == token) return;
+    local.setSession(token: token, me: null);
+  }
+
+  Future<void> _notifySigningOut() async {
+    try {
+      await onSigningOut?.call();
+    } catch (_) {
+      // Authentication must still be cleared if playback cleanup fails.
+    }
+  }
+
+  Future<void> _clearAuthenticationPreservingConnection() async {
+    await _notifySigningOut();
+    api.clearToken();
+    local.setSession(token: '', me: null);
+    authed = false;
+    accountId = null;
+    role = 'guest';
+    nickname = 'Musix';
+    avatarUrl = null;
+    headerThumb = null;
+    bindings = {};
+  }
+}

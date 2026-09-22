@@ -1,0 +1,352 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
+import 'package:provider/provider.dart';
+
+import '../models/models.dart';
+import '../stores/player_store.dart';
+import '../stores/session_store.dart';
+import '../stores/ui_store.dart';
+import '../theme/bottom_chrome.dart';
+import '../theme/player_glass.dart';
+import '../theme/route.dart';
+import '../theme/theme.dart';
+import 'account_view.dart';
+import 'home_view.dart';
+import 'library_view.dart';
+import 'mini_player.dart';
+import 'now_playing_view.dart';
+import 'route_page.dart';
+import 'search_view.dart';
+import 'sheets.dart';
+import 'source_organization_view.dart';
+import 'update_views.dart';
+
+/// The five-tab mobile shell. Mirrors Swift `MobileShell`: one tab each for
+/// 首页 / 资料库 / 最近播放 / 我的 / 搜索, each hosting its own navigation stack,
+/// with the mini player + tab bar as persistent bottom chrome and the toast
+/// floating on top.
+class MobileShell extends StatefulWidget {
+  const MobileShell({super.key});
+
+  @override
+  State<MobileShell> createState() => _MobileShellState();
+}
+
+class _MobileShellState extends State<MobileShell> {
+  static const _order = [
+    AppTab.home,
+    AppTab.library,
+    AppTab.recents,
+    AppTab.profile,
+    AppTab.search
+  ];
+
+  final Map<AppTab, GlobalKey<NavigatorState>> _navKeys = {
+    for (final t in _order) t: GlobalKey<NavigatorState>(),
+  };
+
+  late AppTab _tab;
+
+  @override
+  void initState() {
+    super.initState();
+    final session = context.read<SessionStore>();
+    _tab = AppTab.fromRaw(session.local.prefs.lastTab);
+  }
+
+  void _selectTab(AppTab tab) {
+    if (tab == _tab) {
+      // Re-tapping the active tab pops to its root — matches iOS behavior.
+      _navKeys[tab]?.currentState?.popUntil((r) => r.isFirst);
+      return;
+    }
+    setState(() => _tab = tab);
+    context.read<SessionStore>().local.setTab(tab);
+  }
+
+  void _consumePendingRoute(UIStore ui) {
+    final route = ui.pendingRoute;
+    if (route == null) return;
+    ui.consumePendingRoute();
+    final nav = _navKeys[_tab]?.currentState;
+    nav?.push(instantPageRoute(
+      builder: (_) => RoutePage(route: route),
+      settings: RouteSettings(name: route.heroId),
+    ));
+  }
+
+  Widget _rootFor(AppTab tab) {
+    switch (tab) {
+      case AppTab.home:
+        return HomeView();
+      case AppTab.library:
+        return LibraryView();
+      case AppTab.recents:
+        return RecentsView();
+      case AppTab.profile:
+        return AccountView();
+      case AppTab.search:
+        return SearchView();
+    }
+  }
+
+  Widget _tabNavigator(AppTab tab) {
+    return Navigator(
+      key: _navKeys[tab],
+      onGenerateRoute: (settings) => instantPageRoute(
+        builder: (context) {
+          MXBrightness.value = Theme.of(context).brightness;
+          return _rootFor(tab);
+        },
+        settings: settings,
+      ),
+    );
+  }
+
+  Future<void> _handleSystemBack() async {
+    final nav = _navKeys[_tab]?.currentState;
+    if (nav != null && await nav.maybePop()) return;
+
+    if (_tab != AppTab.home) {
+      _selectTab(AppTab.home);
+      return;
+    }
+
+    SystemNavigator.pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = context.watch<UIStore>();
+    final player = context.watch<PlayerStore>();
+    final media = MediaQuery.of(context);
+    final keyboardVisible = media.viewInsets.bottom > 0;
+    final safeBottom = media.padding.bottom;
+    final navExtent = 60.0 + safeBottom;
+    final playerExtent = player.track == null
+        ? 0.0
+        : (ui.playerExpanded
+            ? MiniPlayer.expandedExtent
+            : MiniPlayer.collapsedExtent);
+    final contentBottomInset =
+        keyboardVisible ? 0.0 : navExtent + playerExtent + 16;
+
+    // Route intents raised anywhere (deep links, in-view navigation) are
+    // pushed onto the active tab's stack after the frame commits.
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) => _consumePendingRoute(ui));
+
+    // Present / dismiss the full Now Playing surface as a fullscreen route.
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) => _syncNowPlaying(player));
+
+    // Present the source-organization sheet when requested via UIStore.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _syncOrganization(ui));
+
+    // Present the aux bottom sheets (队列 / 换源 / 加入歌单) when requested.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _syncSheets(ui));
+
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _handleSystemBack();
+      },
+      child: LiquidGlassScope(
+        child: Stack(
+          children: [
+            GlassBackgroundSource(
+              child: Scaffold(
+                backgroundColor: Colors.transparent,
+                extendBody: true,
+                resizeToAvoidBottomInset: false,
+                body: BottomChromeContent(
+                  extent: contentBottomInset,
+                  child: IndexedStack(
+                    index: _order.indexOf(_tab),
+                    children: [for (final t in _order) _tabNavigator(t)],
+                  ),
+                ),
+              ),
+            ),
+            if (!keyboardVisible)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: Material(
+                  type: MaterialType.transparency,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const UpdateDownloadBanner(),
+                      if (player.track != null) const MiniPlayer(),
+                      LiquidDock(
+                          current: _tab, order: _order, onSelect: _selectTab),
+                    ],
+                  ),
+                ),
+              ),
+            if (ui.toast.isNotEmpty)
+              Positioned(
+                top: MediaQuery.of(context).padding.top + 12,
+                left: 0,
+                right: 0,
+                child: Material(
+                  type: MaterialType.transparency,
+                  child: Center(child: _Toast(text: ui.toast)),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  bool _organizationShown = false;
+  void _syncOrganization(UIStore ui) {
+    if (ui.organizationOpen && !_organizationShown) {
+      _organizationShown = true;
+      final tracks = List<Track>.from(ui.organizationTracks);
+      Navigator.of(context, rootNavigator: true)
+          .push(instantPageRoute(
+        builder: (_) => SourceOrganizationView(tracks: tracks),
+        fullscreenDialog: true,
+      ))
+          .then((_) {
+        _organizationShown = false;
+        ui.closeSheets();
+      });
+    }
+  }
+
+  bool _queueShown = false;
+  bool _sourceShown = false;
+  bool _pickerShown = false;
+  void _syncSheets(UIStore ui) {
+    if (ui.queueOpen && !_queueShown) {
+      _queueShown = true;
+      showAuxSheet(context, const QueueSheet()).then((_) {
+        _queueShown = false;
+        ui.closeSheets();
+      });
+    }
+    if (ui.sourceOpen && !_sourceShown) {
+      _sourceShown = true;
+      showAuxSheet(context, const SourceSheet()).then((_) {
+        _sourceShown = false;
+        ui.closeSheets();
+      });
+    }
+    if (ui.pickerOpen && !_pickerShown) {
+      _pickerShown = true;
+      showAuxSheet(context, const PlaylistPickerSheet()).then((_) {
+        _pickerShown = false;
+        ui.closeSheets();
+      });
+    }
+  }
+
+  bool _nowPlayingShown = false;
+  void _syncNowPlaying(PlayerStore player) {
+    if (player.nowPlayingOpen && !_nowPlayingShown) {
+      _nowPlayingShown = true;
+      Navigator.of(context, rootNavigator: true)
+          .push(instantPageRoute(builder: (_) => const NowPlayingView()))
+          .then((_) {
+        _nowPlayingShown = false;
+        player.setNowPlayingOpen(false);
+      });
+    } else if (!player.nowPlayingOpen && _nowPlayingShown) {
+      _nowPlayingShown = false;
+      Navigator.of(context, rootNavigator: true).maybePop();
+    }
+  }
+}
+
+class LiquidDock extends StatelessWidget {
+  final AppTab current;
+  final List<AppTab> order;
+  final ValueChanged<AppTab> onSelect;
+  const LiquidDock({
+    super.key,
+    required this.current,
+    required this.order,
+    required this.onSelect,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.of(context).padding.bottom;
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottomInset),
+      child: MediaQuery.removePadding(
+        context: context,
+        removeBottom: true,
+        child: GlassTabBar.bottom(
+          tabs: [
+            for (final tab in order)
+              GlassTab(
+                icon: Icon(_tabIcon(tab, false)),
+                activeIcon: Icon(_tabIcon(tab, true)),
+                label: tab.title,
+              ),
+          ],
+          selectedIndex: order.indexOf(current),
+          onTabSelected: (index) => onSelect(order[index]),
+          barHeight: 60,
+          barBorderRadius: 30,
+          horizontalPadding: 12,
+          verticalPadding: 0,
+          iconSize: 23,
+          labelFontSize: 11,
+          iconLabelSpacing: 3,
+          selectedIconColor: ThemeAccent.current.color,
+          selectedLabelColor: ThemeAccent.current.color,
+          unselectedIconColor: Theme.of(context).colorScheme.onSurface,
+          unselectedLabelColor: Theme.of(context).colorScheme.onSurface,
+          quality: playerGlassQuality(context),
+          settings: playerGlassSettings(context),
+          indicatorSettings: playerGlassSettings(context),
+          indicatorColor: Colors.white.withValues(alpha: 0.08),
+          glowOpacity: 0,
+        ),
+      ),
+    );
+  }
+
+  IconData _tabIcon(AppTab tab, bool active) {
+    switch (tab) {
+      case AppTab.home:
+        return active ? Icons.home_rounded : Icons.home_outlined;
+      case AppTab.library:
+        return active ? Icons.library_music : Icons.library_music_outlined;
+      case AppTab.recents:
+        return active ? Icons.access_time_filled : Icons.access_time;
+      case AppTab.profile:
+        return active ? Icons.account_circle : Icons.account_circle_outlined;
+      case AppTab.search:
+        return Icons.search;
+    }
+  }
+}
+
+/// Glass capsule toast. Mirrors Swift `ToastChrome`.
+class _Toast extends StatelessWidget {
+  final String text;
+  const _Toast({required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return GlassToast(
+      key: ValueKey(text),
+      message: text,
+      type: GlassToastType.neutral,
+      position: GlassToastPosition.top,
+      dismissible: false,
+      quality: GlassQuality.standard,
+      settings: playerGlassSettings(context).copyWith(blur: 18),
+    );
+  }
+}

@@ -1,0 +1,138 @@
+import 'dart:async';
+
+import 'package:audio_service/audio_service.dart';
+import 'package:just_audio/just_audio.dart';
+
+import 'player_store.dart';
+
+/// Bridges [PlayerStore] to the OS media session (lock screen / notification /
+/// bluetooth). Mirrors the role of Swift `NowPlaying` (`MPNowPlayingSession` +
+/// `MPRemoteCommandCenter`). The store owns the [AudioPlayer]; this handler only
+/// forwards transport commands and broadcasts the current [MediaItem] +
+/// [PlaybackState] derived from the store's engine.
+class MusixAudioHandler extends BaseAudioHandler {
+  final PlayerStore player;
+  StreamSubscription<PlaybackEvent>? _engineEvents;
+
+  /// Custom control id for the "收藏" (favorite) button on the notification.
+  static const _favoriteAction = 'toggleFavorite';
+
+  MusixAudioHandler(this.player) {
+    _observeEngine(player.engine);
+    player.engineChanges.listen(_observeEngine);
+    player.favoriteChanges.listen((_) => _broadcastState());
+    // loading / wantsPlayback transitions also change the broadcast state
+    // (they keep the foreground service alive during source resolution).
+    player.addListener(_broadcastState);
+    player.mediaItemChanges.listen((item) {
+      mediaItem.add(item);
+      _broadcastState();
+    });
+  }
+
+  void _observeEngine(AudioPlayer engine) {
+    _engineEvents?.cancel();
+    _engineEvents = engine.playbackEventStream.listen((_) {
+      if (identical(engine, player.engine)) _broadcastState();
+    },
+        // Source loading errors are handled by PlayerStore's awaited load/play.
+        // Consuming the broadcast error keeps it from escaping as a platform error.
+        onError: (Object error, StackTrace stack) {
+      if (identical(engine, player.engine)) _broadcastState();
+    });
+  }
+
+  void _broadcastState() {
+    final engine = player.engine;
+    // While a source is being resolved/buffered with the intent to play, the
+    // freshly replaced engine is still idle and engine.playing is false. The
+    // native side only enters its foreground state (startForegroundService +
+    // wakelock) on a false→true "playing" transition, so broadcast that state
+    // for the whole loading window. Otherwise, locking the screen or
+    // backgrounding the app during 解析音源 lets ColorOS freeze the cached
+    // process and every resolve request stalls until the app is foregrounded.
+    final loadingForPlayback = player.loadingForPlayback;
+    final playing = engine.playing || loadingForPlayback;
+    final favorited = player.favorited;
+    const processingMap = {
+      ProcessingState.idle: AudioProcessingState.idle,
+      ProcessingState.loading: AudioProcessingState.loading,
+      ProcessingState.buffering: AudioProcessingState.buffering,
+      ProcessingState.ready: AudioProcessingState.ready,
+      ProcessingState.completed: AudioProcessingState.completed,
+    };
+    final engineState = processingMap[engine.processingState]!;
+    // Keep the reported state non-idle while resolving: an idle transition
+    // would make the native side stop() the media session.
+    final processingState =
+        loadingForPlayback && engine.processingState == ProcessingState.idle
+            ? AudioProcessingState.buffering
+            : engineState;
+    playbackState.add(playbackState.value.copyWith(
+      controls: [
+        // Favorite first: the patched Android side publishes custom controls
+        // as notification actions too, so the heart shows on the expanded
+        // notification and Android 13+ media sheets. Note ColorOS lock-screen
+        // cards render a fixed previous / play-pause / next trio only and
+        // drop every custom action — verified over multiple experiments on a
+        // OnePlus ColorOS device.
+        MediaControl.custom(
+          androidIcon: favorited
+              ? 'drawable/ic_favorite_filled'
+              : 'drawable/ic_favorite_border',
+          label: favorited ? '取消收藏' : '收藏',
+          name: _favoriteAction,
+        ),
+        MediaControl.skipToPrevious,
+        if (playing) MediaControl.pause else MediaControl.play,
+        MediaControl.skipToNext,
+      ],
+      systemActions: const {
+        MediaAction.seek,
+        MediaAction.seekForward,
+        MediaAction.seekBackward,
+        MediaAction.play,
+        MediaAction.pause,
+        MediaAction.skipToNext,
+        MediaAction.skipToPrevious,
+      },
+      // Compact notifications keep the three transport controls; the favorite
+      // button lives on the expanded notification.
+      androidCompactActionIndices: const [1, 2, 3],
+      processingState: processingState,
+      playing: playing,
+      updatePosition: engine.position,
+      bufferedPosition: engine.bufferedPosition,
+      speed: engine.speed,
+    ));
+  }
+
+  @override
+  Future<void> play() => player.requestPlay();
+
+  @override
+  Future<void> pause() async => player.requestPause();
+
+  @override
+  Future<void> skipToNext() => player.next();
+
+  @override
+  Future<void> skipToPrevious() => player.prev();
+
+  @override
+  Future<void> seek(Duration position) async =>
+      player.seek(position.inMilliseconds / 1000.0);
+
+  @override
+  Future<void> stop() async {
+    await player.requestPauseAsync();
+    await super.stop();
+  }
+
+  @override
+  Future<void> customAction(String name, [Map<String, dynamic>? extras]) async {
+    if (name == _favoriteAction) {
+      await player.toggleFavorite();
+    }
+  }
+}

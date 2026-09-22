@@ -1,0 +1,104 @@
+plugins {
+    id "com.android.application"
+    id "kotlin-android"
+    id "dev.flutter.flutter-gradle-plugin"
+}
+
+def localProperties = new Properties()
+def localPropertiesFile = rootProject.file('local.properties')
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.withReader('UTF-8') { reader ->
+        localProperties.load(reader)
+    }
+}
+
+def flutterVersionCode = localProperties.getProperty('flutter.versionCode')
+if (flutterVersionCode == null) {
+    flutterVersionCode = '1'
+}
+
+def flutterVersionName = localProperties.getProperty('flutter.versionName')
+if (flutterVersionName == null) {
+    flutterVersionName = '0.7.8'
+}
+
+def versionProperties = new Properties()
+rootProject.file('version.properties').withInputStream { versionProperties.load(it) }
+def versionCodeOffset = versionProperties.getProperty('versionCodeOffset').toInteger()
+def buildSequence = flutterVersionCode.toInteger()
+if (buildSequence < 1) throw new GradleException('Build sequence must be positive.')
+// CI exports APP_DISPLAY_VERSION (e.g. 0.8.12(003)) whose sequence restarts
+// per base version; gradle's own run-number suffix (071) would disagree with
+// what the app and the installer comparison show, so prefer the env value.
+def envDisplayVersion = System.getenv('APP_DISPLAY_VERSION')
+def displayVersion = envDisplayVersion ?: "${flutterVersionName}(${String.format('%03d', buildSequence)})"
+
+def signingProperties = new Properties()
+def signingPropertiesFile = rootProject.file('key.properties')
+if (signingPropertiesFile.exists()) {
+    signingPropertiesFile.withInputStream { signingProperties.load(it) }
+}
+def releaseSigning = [
+    storeFile: System.getenv('ANDROID_KEYSTORE_PATH') ?: signingProperties['storeFile'],
+    storePassword: System.getenv('ANDROID_KEYSTORE_PASSWORD') ?: signingProperties['storePassword'],
+    keyAlias: System.getenv('ANDROID_KEY_ALIAS') ?: signingProperties['keyAlias'],
+    keyPassword: System.getenv('ANDROID_KEY_PASSWORD') ?: signingProperties['keyPassword']
+]
+
+// Never silently fall back to a new runner's debug certificate for a release.
+gradle.taskGraph.whenReady { graph ->
+    if (graph.allTasks.any { it.project == project && it.name.toLowerCase().contains('release') }) {
+        def missing = releaseSigning.findAll { key, value -> !value }.keySet()
+        if (!missing.isEmpty()) {
+            throw new GradleException("Release signing is not configured: ${missing.join(', ')}. Supply Android signing secrets or android/key.properties.")
+        }
+        if (!file(releaseSigning.storeFile).isFile()) {
+            throw new GradleException('The configured release keystore does not exist.')
+        }
+    }
+}
+
+android {
+    namespace = "com.musix.app"
+    compileSdk = 36
+    ndkVersion = flutter.ndkVersion
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+
+    defaultConfig {
+        applicationId = "com.musix.app"
+        minSdkVersion = flutter.minSdkVersion
+        targetSdk = 36
+        versionCode = versionCodeOffset + buildSequence
+        versionName = displayVersion
+    }
+
+    signingConfigs {
+        release {
+            if (releaseSigning.storeFile) storeFile file(releaseSigning.storeFile)
+            storePassword releaseSigning.storePassword
+            keyAlias releaseSigning.keyAlias
+            keyPassword releaseSigning.keyPassword
+            storeType 'PKCS12'
+        }
+    }
+
+    buildTypes {
+        release {
+            signingConfig = signingConfigs.release
+            minifyEnabled = false
+            shrinkResources = false
+        }
+    }
+}
+
+flutter {
+    source = "../.."
+}
