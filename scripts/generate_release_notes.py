@@ -32,6 +32,7 @@ GROUP_INDEX = dict(GROUP_TITLES)
 SUBJECT_RE = re.compile(
     r'^(?P<type>\w+)(?:\((?P<scope>[^)]*)\))?!?:\s*(?P<desc>.+)$')
 SKIP_RE = re.compile(r'^(merge\b|revert\b|chore\(release\))', re.IGNORECASE)
+BULLET_RE = re.compile(r'^[-*]\s+')
 
 MAX_ITEMS_PER_GROUP = 12
 
@@ -58,18 +59,31 @@ def classify(subject):
     return (kind, text)
 
 
-def build_sections(subjects):
-    """Group commit subjects into ordered (title, items) sections."""
+def build_sections(entries):
+    """Group commit entries into ordered (title, items) sections.
+
+    Entries are commit subjects plus bullet lines from commit bodies, so a
+    single squashed commit with a detailed body still yields a rich changelog.
+    Duplicate entries are kept once per section.
+    """
     grouped = {}
     other = []
-    for subject in subjects:
-        entry = classify(subject)
-        if entry is None:
+    seen_grouped = set()
+    seen_other = set()
+    for entry in entries:
+        result = classify(entry)
+        if result is None:
             continue
-        kind, text = entry
+        kind, text = result
         if kind in GROUP_INDEX:
+            if text in seen_grouped:
+                continue
+            seen_grouped.add(text)
             grouped.setdefault(kind, []).append(text)
         else:
+            if text in seen_other:
+                continue
+            seen_other.add(text)
             other.append(text)
 
     sections = []
@@ -82,9 +96,9 @@ def build_sections(subjects):
     return sections
 
 
-def render_notes(subjects, build_tag='', commit='', date=''):
+def render_notes(entries, build_tag='', commit='', date=''):
     """Render grouped Markdown notes; empty string when nothing is reportable."""
-    sections = build_sections(subjects)
+    sections = build_sections(entries)
     if not sections:
         return ''
 
@@ -122,12 +136,31 @@ def previous_tag(root):
                 '--match', 'build-*').strip()
 
 
-def commit_subjects(root, since_tag, limit=60):
-    args = ['log', '--no-merges', '--pretty=%s', f'-n{limit}']
+def commit_entries(root, since_tag, limit=60):
+    """Collect commit subjects plus bullet lines from their bodies.
+
+    Squashed commits (one summary + a bulleted detail body) are common on this
+    repo, and the bullets carry the user-facing details the changelog needs.
+    """
+    args = ['log', '--no-merges', '--pretty=format:%x1e%s%n%b', f'-n{limit}']
     if since_tag:
         args.append(f'{since_tag}..HEAD')
     output = _git(root, *args)
-    return [line for line in output.splitlines() if line.strip()]
+    entries = []
+    for block in output.split('\x1e'):
+        lines = block.strip().splitlines()
+        if not lines:
+            continue
+        subject = lines[0].strip()
+        if subject:
+            entries.append(subject)
+        for line in lines[1:]:
+            text = line.strip()
+            while BULLET_RE.match(text):
+                text = BULLET_RE.sub('', text, count=1).strip()
+            if text:
+                entries.append(text)
+    return entries
 
 
 def main():
@@ -139,19 +172,41 @@ def main():
     parser.add_argument('--date', default='', help='build date')
     parser.add_argument('--from-tag', default=None,
                         help='override the detected previous tag')
+    parser.add_argument('--override', default='',
+                        help='path to hand-written notes; used only when the '
+                             'file contains the current build tag, so stale '
+                             'override files never leak into newer builds')
     args = parser.parse_args()
 
     root = Path(args.repo_root).resolve()
+    footer = ' · '.join(part for part in
+                        (args.build_tag, args.commit, args.date) if part)
+
+    if args.override and args.build_tag:
+        override_path = Path(args.override)
+        if override_path.exists():
+            content = override_path.read_text(encoding='utf-8').strip()
+            if content and args.build_tag in content:
+                notes = content + '\n\n---\n' + footer + '\n' if footer \
+                    else content + '\n'
+                if args.output:
+                    Path(args.output).write_text(notes, encoding='utf-8')
+                    print(f'Release notes: hand-written override '
+                          f'({override_path}).', file=sys.stderr)
+                else:
+                    print(notes, end='')
+                return
+
     since = args.from_tag if args.from_tag is not None else previous_tag(root)
-    subjects = commit_subjects(root, since)
-    notes = render_notes(subjects, build_tag=args.build_tag,
+    entries = commit_entries(root, since)
+    notes = render_notes(entries, build_tag=args.build_tag,
                          commit=args.commit, date=args.date)
     if not notes:
         notes = EMPTY_NOTES + '\n'
 
     if args.output:
         Path(args.output).write_text(notes, encoding='utf-8')
-        print(f'Release notes: {len(subjects)} commit subject(s), '
+        print(f'Release notes: {len(entries)} entry/entries, '
               f'since {since or "the beginning"}.', file=sys.stderr)
     else:
         print(notes, end='')

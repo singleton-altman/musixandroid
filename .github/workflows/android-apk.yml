@@ -116,6 +116,7 @@ jobs:
             --build-tag "build-$GITHUB_RUN_NUMBER" \
             --commit "${GITHUB_SHA:0:7}" \
             --date "$(date -u +%Y-%m-%d)" \
+            --override RELEASE_NOTES.md \
             --output "$RUNNER_TEMP/release-notes.md"
           cat "$RUNNER_TEMP/release-notes.md"
 

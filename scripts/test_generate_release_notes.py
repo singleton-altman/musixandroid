@@ -3,7 +3,7 @@ import unittest
 from generate_release_notes import (
     build_sections,
     classify,
-    commit_subjects,
+    commit_entries,
     previous_tag,
     render_notes,
 )
@@ -41,6 +41,20 @@ class SectionTests(unittest.TestCase):
         sections = build_sections(['chore(deps): 升级依赖', '随便一句'])
         self.assertEqual(sections, [('其它改动', ['升级依赖（deps）', '随便一句'])])
 
+    def test_body_bullets_are_grouped_and_deduped(self):
+        sections = build_sections([
+            'feat: 全站玻璃化统一',
+            'fix(player): 解析音源期间提前进入前台服务',
+            'fix(player): 解析音源期间提前进入前台服务',
+            '随便一句重复',
+            '随便一句重复',
+        ])
+        self.assertEqual(sections, [
+            ('新功能', ['全站玻璃化统一']),
+            ('问题修复', ['解析音源期间提前进入前台服务（player）']),
+            ('其它改动', ['随便一句重复']),
+        ])
+
     def test_render_skips_empty_and_writes_footer(self):
         self.assertEqual(render_notes(['Merge branch x']), '')
         notes = render_notes(['feat: 新增歌词页'], build_tag='build-65',
@@ -57,7 +71,7 @@ class GitIntegrationTests(unittest.TestCase):
             self.skipTest('not a git checkout')
         # The checkout always has commits; a tag may or may not exist yet.
         previous_tag(root)
-        self.assertIsInstance(commit_subjects(root, '', limit=3), list)
+        self.assertIsInstance(commit_entries(root, '', limit=3), list)
 
 
 if __name__ == '__main__':
