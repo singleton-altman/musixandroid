@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../services/app_update.dart';
 import '../services/release_notes.dart';
+import '../services/update_history.dart';
 import '../services/update_mirror.dart';
 import '../services/update_speed_tester.dart';
 import '../stores/ui_store.dart';
@@ -25,6 +26,12 @@ Future<void> showUpdateSheet(BuildContext context) async {
 Future<void> showUpdateMirrorSheet(BuildContext context,
     {String sourceUrl = ''}) async {
   await showMusicGlassSheet(context, _UpdateMirrorSheet(sourceUrl: sourceUrl));
+}
+
+/// 更新日记：全部历史版本的分组更新内容（打包离线数据）。
+Future<void> showUpdateHistorySheet(BuildContext context) async {
+  await showMusicGlassSheet(context, const _UpdateHistorySheet(),
+      halfSize: 0.72, fullSize: 0.94);
 }
 
 enum _UpdatePhase { checking, upToDate, available, downloading, failed }
@@ -272,69 +279,7 @@ class _UpdateSheetState extends State<_UpdateSheet> {
             color: scheme.onSurfaceVariant, fontSize: 12.5, height: 1.4),
       );
     }
-
-    final children = <Widget>[];
-    for (final block in _notes.blocks) {
-      switch (block.kind) {
-        case ReleaseNoteKind.heading:
-          if (children.isNotEmpty) children.add(const SizedBox(height: 9));
-          children.add(Row(
-            children: [
-              Container(
-                width: 3,
-                height: 12,
-                decoration: BoxDecoration(
-                    color: MX.ember, borderRadius: BorderRadius.circular(2)),
-              ),
-              const SizedBox(width: 7),
-              Expanded(
-                child: Text(block.text,
-                    style: TextStyle(
-                        color: MX.fg,
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w700)),
-              ),
-            ],
-          ));
-          children.add(const SizedBox(height: 6));
-        case ReleaseNoteKind.bullet:
-          children.add(Padding(
-            padding: const EdgeInsets.only(bottom: 5),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(top: 6.5, right: 8, left: 3),
-                  child: Container(
-                    width: 4,
-                    height: 4,
-                    decoration: BoxDecoration(
-                        color: MX.ember.withValues(alpha: 0.75),
-                        shape: BoxShape.circle),
-                  ),
-                ),
-                Expanded(
-                  child: Text(block.text,
-                      style: TextStyle(
-                          color: scheme.onSurfaceVariant,
-                          fontSize: 12.5,
-                          height: 1.45)),
-                ),
-              ],
-            ),
-          ));
-        case ReleaseNoteKind.text:
-          children.add(Padding(
-            padding: const EdgeInsets.only(bottom: 5),
-            child: Text(block.text,
-                style: TextStyle(
-                    color: MX.dim, fontSize: 12, height: 1.45)),
-          ));
-      }
-    }
-
-    return Column(
-        crossAxisAlignment: CrossAxisAlignment.start, children: children);
+    return ReleaseNoteBlocks(blocks: _notes.blocks);
   }
 
   Widget _mirrorRow(ColorScheme scheme) {
@@ -365,6 +310,27 @@ class _UpdateSheetState extends State<_UpdateSheet> {
     );
   }
 
+  Widget _historyRow(ColorScheme scheme) {
+    return InkWell(
+      onTap: () => showUpdateHistorySheet(context),
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
+        child: Row(
+          children: [
+            Icon(Icons.history_rounded, size: 17, color: MX.ember),
+            const SizedBox(width: 8),
+            Text('更新日记',
+                style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13)),
+            const Spacer(),
+            Icon(Icons.chevron_right_rounded,
+                size: 18, color: scheme.onSurfaceVariant),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -383,6 +349,7 @@ class _UpdateSheetState extends State<_UpdateSheet> {
                   fontWeight: FontWeight.w700)),
           const SizedBox(height: 14),
           _mirrorRow(scheme),
+          _historyRow(scheme),
           const SizedBox(height: 6),
           switch (_phase) {
             _UpdatePhase.checking => Padding(
@@ -476,6 +443,208 @@ class _UpdateSheetState extends State<_UpdateSheet> {
           },
         ],
       ),
+    );
+  }
+}
+
+// ===========================================================================
+// 更新内容渲染：分组标题 + 圆点条目（检查更新与更新日记共用）
+// ===========================================================================
+
+class ReleaseNoteBlocks extends StatelessWidget {
+  const ReleaseNoteBlocks({super.key, required this.blocks});
+
+  final List<ReleaseNoteBlock> blocks;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final children = <Widget>[];
+    for (final block in blocks) {
+      switch (block.kind) {
+        case ReleaseNoteKind.heading:
+          if (children.isNotEmpty) children.add(const SizedBox(height: 9));
+          children.add(Row(
+            children: [
+              Container(
+                width: 3,
+                height: 12,
+                decoration: BoxDecoration(
+                    color: MX.ember, borderRadius: BorderRadius.circular(2)),
+              ),
+              const SizedBox(width: 7),
+              Expanded(
+                child: Text(block.text,
+                    style: TextStyle(
+                        color: MX.fg,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700)),
+              ),
+            ],
+          ));
+          children.add(const SizedBox(height: 6));
+        case ReleaseNoteKind.bullet:
+          children.add(Padding(
+            padding: const EdgeInsets.only(bottom: 5),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 6.5, right: 8, left: 3),
+                  child: Container(
+                    width: 4,
+                    height: 4,
+                    decoration: BoxDecoration(
+                        color: MX.ember.withValues(alpha: 0.75),
+                        shape: BoxShape.circle),
+                  ),
+                ),
+                Expanded(
+                  child: Text(block.text,
+                      style: TextStyle(
+                          color: scheme.onSurfaceVariant,
+                          fontSize: 12.5,
+                          height: 1.45)),
+                ),
+              ],
+            ),
+          ));
+        case ReleaseNoteKind.text:
+          children.add(Padding(
+            padding: const EdgeInsets.only(bottom: 5),
+            child: Text(block.text,
+                style: TextStyle(
+                    color: MX.dim, fontSize: 12, height: 1.45)),
+          ));
+      }
+    }
+    return Column(
+        crossAxisAlignment: CrossAxisAlignment.start, children: children);
+  }
+}
+
+// ===========================================================================
+// 更新日记面板：全部历史版本的更新内容
+// ===========================================================================
+
+class _UpdateHistorySheet extends StatefulWidget {
+  const _UpdateHistorySheet();
+
+  @override
+  State<_UpdateHistorySheet> createState() => _UpdateHistorySheetState();
+}
+
+class _UpdateHistorySheetState extends State<_UpdateHistorySheet> {
+  List<UpdateHistoryEntry>? _entries;
+
+  @override
+  void initState() {
+    super.initState();
+    UpdateHistory.load().then((entries) {
+      if (mounted) setState(() => _entries = entries);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final entries = _entries;
+    final header = Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Text('更新日记',
+          style: TextStyle(
+              color: scheme.onSurface,
+              fontSize: 18,
+              fontWeight: FontWeight.w700)),
+    );
+
+    if (entries == null) {
+      return ListView(
+        padding: const EdgeInsets.fromLTRB(20, 10, 20, 26),
+        children: [
+          header,
+          const SizedBox(height: 24),
+          Center(
+            child: SizedBox(
+              width: 22,
+              height: 22,
+              child:
+                  CircularProgressIndicator(strokeWidth: 2, color: MX.ember),
+            ),
+          ),
+        ],
+      );
+    }
+
+    if (entries.isEmpty) {
+      return ListView(
+        padding: const EdgeInsets.fromLTRB(20, 10, 20, 26),
+        children: [
+          header,
+          const SizedBox(height: 24),
+          Text('暂无更新记录',
+              textAlign: TextAlign.center,
+              style:
+                  TextStyle(color: scheme.onSurfaceVariant, fontSize: 13)),
+        ],
+      );
+    }
+
+    // 文件内是旧 → 新，展示时 newest first。
+    final ordered = entries.reversed.toList(growable: false);
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 26),
+      itemCount: ordered.length + 1,
+      itemBuilder: (context, index) {
+        if (index == 0) return header;
+        final entry = ordered[index - 1];
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+            decoration: BoxDecoration(
+              color: MX.fillSoft,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: MX.hairline, width: 0.6),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Text(entry.title,
+                        style: TextStyle(
+                            color: MX.fg,
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.w700)),
+                    if (entry.tag != entry.title) ...[
+                      const SizedBox(width: 7),
+                      Text(entry.tag,
+                          style: TextStyle(
+                              color: MX.dim, fontSize: 11)),
+                    ],
+                    const Spacer(),
+                    Text(entry.date,
+                        style: TextStyle(
+                            color: scheme.onSurfaceVariant, fontSize: 11.5)),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                if (entry.notes.isEmpty)
+                  Text('本版未记录详细更新说明',
+                      style: TextStyle(
+                          color: scheme.onSurfaceVariant,
+                          fontSize: 12.5,
+                          height: 1.4))
+                else
+                  ReleaseNoteBlocks(blocks: entry.notes.blocks),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

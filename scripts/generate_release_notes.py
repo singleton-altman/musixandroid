@@ -136,7 +136,7 @@ def previous_tag(root):
                 '--match', 'build-*').strip()
 
 
-def commit_entries(root, since_tag, limit=60):
+def commit_entries(root, since_tag, limit=60, until='HEAD'):
     """Collect commit subjects plus bullet lines from their bodies.
 
     Squashed commits (one summary + a bulleted detail body) are common on this
@@ -144,7 +144,7 @@ def commit_entries(root, since_tag, limit=60):
     """
     args = ['log', '--no-merges', '--pretty=format:%x1e%s%n%b', f'-n{limit}']
     if since_tag:
-        args.append(f'{since_tag}..HEAD')
+        args.append(f'{since_tag}..{until}')
     output = _git(root, *args)
     entries = []
     for block in output.split('\x1e'):
