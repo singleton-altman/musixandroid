@@ -9,6 +9,7 @@ import '../theme/artwork_color.dart';
 import '../theme/route.dart';
 import '../theme/theme.dart';
 import 'components.dart';
+import 'glass_controls.dart';
 import 'glass_surfaces.dart';
 
 String _enc(String s) => Uri.encodeComponent(s);
@@ -20,7 +21,7 @@ class _HeroScaffold extends StatelessWidget {
   final String? cover;
   final List<String>? mosaic;
   final Widget child;
-  final List<Widget> menu;
+  final List<MusicMenuAction> menu;
 
   const _HeroScaffold({
     required this.title,
@@ -40,18 +41,10 @@ class _HeroScaffold extends StatelessWidget {
         foregroundColor: Colors.white,
         title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 16)),
         actions: [
+          // Same circular glass "…" trigger + anchored glass menu as the
+          // Now Playing page, so every top-right menu in the app matches.
           if (menu.isNotEmpty)
-            PopupMenuButton<int>(
-              icon: const Icon(Icons.more_horiz),
-              color: MX.panel,
-              itemBuilder: (_) => [
-                for (var i = 0; i < menu.length; i++) PopupMenuItem(value: i, child: menu[i]),
-              ],
-              onSelected: (i) {
-                final item = menu[i];
-                if (item is _MenuAction) item.onTap();
-              },
-            ),
+            MusicActionsMenu(actions: menu, glassTrigger: true),
         ],
       ),
       body: Stack(
@@ -74,27 +67,6 @@ class _HeroScaffold extends StatelessWidget {
           child,
         ],
       ),
-    );
-  }
-}
-
-/// A menu row with an inline action, used in the hero popup menu.
-class _MenuAction extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-  final bool destructive;
-  const _MenuAction(this.icon, this.label, this.onTap, {this.destructive = false});
-
-  @override
-  Widget build(BuildContext context) {
-    final color = destructive ? Colors.red : MX.fg;
-    return Row(
-      children: [
-        Icon(icon, size: 18, color: color),
-        const SizedBox(width: 12),
-        Text(label, style: TextStyle(color: color)),
-      ],
     );
   }
 }
@@ -396,18 +368,18 @@ class _PlaylistDetailViewState extends State<PlaylistDetailView> {
     final player = context.read<PlayerStore>();
     final ui = context.read<UIStore>();
     final title = _playlist?.displayTitle ?? '歌单';
-    final menu = <Widget>[
-      if (_canFavorite) _MenuAction(_fav ? Icons.heart_broken : Icons.favorite_border, _fav ? '取消收藏' : '收藏', _toggleFav),
+    final menu = <MusicMenuAction>[
+      if (_canFavorite) MusicMenuAction(_fav ? '取消收藏' : '收藏', _fav ? Icons.heart_broken : Icons.favorite_border, _toggleFav),
       if (_canSubscribe)
         _subState?.subscribed == true
-            ? _MenuAction(Icons.notifications_off, '取消订阅', _unsubscribe, destructive: true)
-            : _MenuAction(Icons.notifications, '订阅', _subscribe),
-      if (_subState?.subscribed == true) _MenuAction(Icons.refresh, _syncing ? '同步中…' : '同步', _syncSubscription),
-      if (_canIngest) _MenuAction(Icons.download, _ingesting ? '入库中…' : '一键入库', _confirmIngest),
-      if (_canDelete) _MenuAction(Icons.delete, '解散歌单', _confirmDelete, destructive: true),
-      if (_tracks.isNotEmpty) _MenuAction(Icons.graphic_eq, '整理音源', () => ui.openOrganization(_tracks)),
-      if (_tracks.isNotEmpty) _MenuAction(Icons.play_arrow, '播放', () => player.replaceQueue(_tracks, start: 0, source: _source)),
-      if (_tracks.isNotEmpty) _MenuAction(Icons.shuffle, '随机播放', _playShuffled),
+            ? MusicMenuAction('取消订阅', Icons.notifications_off, _unsubscribe, destructive: true)
+            : MusicMenuAction('订阅', Icons.notifications, _subscribe),
+      if (_subState?.subscribed == true) MusicMenuAction(_syncing ? '同步中…' : '同步', Icons.refresh, _syncSubscription),
+      if (_canIngest) MusicMenuAction(_ingesting ? '入库中…' : '一键入库', Icons.download, _confirmIngest),
+      if (_canDelete) MusicMenuAction('解散歌单', Icons.delete, _confirmDelete, destructive: true),
+      if (_tracks.isNotEmpty) MusicMenuAction('整理音源', Icons.graphic_eq, () => ui.openOrganization(_tracks)),
+      if (_tracks.isNotEmpty) MusicMenuAction('播放', Icons.play_arrow, () => player.replaceQueue(_tracks, start: 0, source: _source)),
+      if (_tracks.isNotEmpty) MusicMenuAction('随机播放', Icons.shuffle, _playShuffled),
     ];
     return _HeroScaffold(
       title: title,
@@ -578,12 +550,12 @@ class _AlbumDetailViewState extends State<AlbumDetailView> {
     final player = context.read<PlayerStore>();
     final ui = context.read<UIStore>();
     final title = _album?.displayTitle ?? '专辑';
-    final menu = <Widget>[
-      _MenuAction(_fav ? Icons.check : Icons.favorite_border, _fav ? '取消收藏' : '收藏', _toggleFav),
-      if (_tracks.isNotEmpty) _MenuAction(Icons.graphic_eq, '整理音源', () => ui.openOrganization(_tracks)),
-      if (_ingestible.isNotEmpty) _MenuAction(Icons.download, _ingesting ? '入库中…' : '一键入库', _confirmIngest),
-      if (_tracks.isNotEmpty) _MenuAction(Icons.play_arrow, '播放', () => player.replaceQueue(_tracks, start: 0, source: _source)),
-      if (_tracks.isNotEmpty) _MenuAction(Icons.shuffle, '随机播放', _playShuffled),
+    final menu = <MusicMenuAction>[
+      MusicMenuAction(_fav ? '取消收藏' : '收藏', _fav ? Icons.check : Icons.favorite_border, _toggleFav),
+      if (_tracks.isNotEmpty) MusicMenuAction('整理音源', Icons.graphic_eq, () => ui.openOrganization(_tracks)),
+      if (_ingestible.isNotEmpty) MusicMenuAction(_ingesting ? '入库中…' : '一键入库', Icons.download, _confirmIngest),
+      if (_tracks.isNotEmpty) MusicMenuAction('播放', Icons.play_arrow, () => player.replaceQueue(_tracks, start: 0, source: _source)),
+      if (_tracks.isNotEmpty) MusicMenuAction('随机播放', Icons.shuffle, _playShuffled),
     ];
     return _HeroScaffold(
       title: title,
@@ -711,10 +683,10 @@ class _ArtistDetailViewState extends State<ArtistDetailView> {
     final player = context.read<PlayerStore>();
     final ui = context.read<UIStore>();
     final title = _artist?.displayName ?? '艺人';
-    final menu = <Widget>[
-      _MenuAction(_fav ? Icons.check : Icons.favorite_border, _fav ? '取消收藏' : '收藏', _toggleFav),
-      if (_tracks.isNotEmpty) _MenuAction(Icons.play_arrow, '播放', () => player.replaceQueue(_tracks, start: 0, source: _source)),
-      if (_tracks.isNotEmpty) _MenuAction(Icons.shuffle, '随机播放', _playShuffled),
+    final menu = <MusicMenuAction>[
+      MusicMenuAction(_fav ? '取消收藏' : '收藏', _fav ? Icons.check : Icons.favorite_border, _toggleFav),
+      if (_tracks.isNotEmpty) MusicMenuAction('播放', Icons.play_arrow, () => player.replaceQueue(_tracks, start: 0, source: _source)),
+      if (_tracks.isNotEmpty) MusicMenuAction('随机播放', Icons.shuffle, _playShuffled),
     ];
     return _HeroScaffold(
       title: title,

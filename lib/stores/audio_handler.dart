@@ -21,6 +21,9 @@ class MusixAudioHandler extends BaseAudioHandler {
     _observeEngine(player.engine);
     player.engineChanges.listen(_observeEngine);
     player.favoriteChanges.listen((_) => _broadcastState());
+    // loading / wantsPlayback transitions also change the broadcast state
+    // (they keep the foreground service alive during source resolution).
+    player.addListener(_broadcastState);
     player.mediaItemChanges.listen((item) {
       mediaItem.add(item);
       _broadcastState();
@@ -41,7 +44,15 @@ class MusixAudioHandler extends BaseAudioHandler {
 
   void _broadcastState() {
     final engine = player.engine;
-    final playing = engine.playing;
+    // While a source is being resolved/buffered with the intent to play, the
+    // freshly replaced engine is still idle and engine.playing is false. The
+    // native side only enters its foreground state (startForegroundService +
+    // wakelock) on a false→true "playing" transition, so broadcast that state
+    // for the whole loading window. Otherwise, locking the screen or
+    // backgrounding the app during 解析音源 lets ColorOS freeze the cached
+    // process and every resolve request stalls until the app is foregrounded.
+    final loadingForPlayback = player.loadingForPlayback;
+    final playing = engine.playing || loadingForPlayback;
     final favorited = player.favorited;
     const processingMap = {
       ProcessingState.idle: AudioProcessingState.idle,
@@ -50,10 +61,21 @@ class MusixAudioHandler extends BaseAudioHandler {
       ProcessingState.ready: AudioProcessingState.ready,
       ProcessingState.completed: AudioProcessingState.completed,
     };
+    final engineState = processingMap[engine.processingState]!;
+    // Keep the reported state non-idle while resolving: an idle transition
+    // would make the native side stop() the media session.
+    final processingState =
+        loadingForPlayback && engine.processingState == ProcessingState.idle
+            ? AudioProcessingState.buffering
+            : engineState;
     playbackState.add(playbackState.value.copyWith(
       controls: [
-        // Favorite first: Android 13+ media cards place the first custom
-        // action in the leftmost slot, next to the transport controls.
+        // Favorite first: the patched Android side publishes custom controls
+        // as notification actions too, so the heart shows on the expanded
+        // notification and Android 13+ media sheets. Note ColorOS lock-screen
+        // cards render a fixed previous / play-pause / next trio only and
+        // drop every custom action — verified over multiple experiments on a
+        // OnePlus ColorOS device.
         MediaControl.custom(
           androidIcon: favorited
               ? 'drawable/ic_favorite_filled'
@@ -74,11 +96,10 @@ class MusixAudioHandler extends BaseAudioHandler {
         MediaAction.skipToNext,
         MediaAction.skipToPrevious,
       },
-      // The patched Android notification keeps the custom favorite action at
-      // index 0. Compact notifications retain the three transport controls;
-      // ColorOS lock screens can use the full action list and show favorite.
+      // Compact notifications keep the three transport controls; the favorite
+      // button lives on the expanded notification.
       androidCompactActionIndices: const [1, 2, 3],
-      processingState: processingMap[engine.processingState]!,
+      processingState: processingState,
       playing: playing,
       updatePosition: engine.position,
       bufferedPosition: engine.bufferedPosition,

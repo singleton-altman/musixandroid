@@ -5,6 +5,7 @@ import '../models/models.dart';
 import '../stores/player_store.dart';
 import '../stores/session_store.dart';
 import '../stores/ui_store.dart';
+import 'glass_controls.dart';
 import '../theme/route.dart';
 import '../theme/theme.dart';
 import 'components.dart';
@@ -881,26 +882,20 @@ class _FavoritesViewState extends State<FavoritesView> {
       appBar: MusicGlassAppBar(
         title: Text('收藏', style: TextStyle(color: MX.fg, fontWeight: FontWeight.bold)),
         actions: [
+          // Same circular glass "…" trigger + anchored glass menu as the
+          // Now Playing page, so every top-right menu in the app matches.
           if (_tab == 'track' && _tracks.isNotEmpty)
-            PopupMenuButton<String>(
-              icon: Icon(Icons.more_horiz, color: MX.fg),
-              tooltip: '更多',
-              color: MX.panel,
-              onSelected: (v) {
-                if (v == 'organize') ui.openOrganization(_tracks);
-                if (v == 'ingest') _confirmIngest();
-                if (v == 'play') player.replaceQueue(_tracks, start: 0);
-              },
-              itemBuilder: (_) => [
-                PopupMenuItem(value: 'organize', child: Text('整理音源', style: TextStyle(color: MX.fg))),
+            MusicActionsMenu(
+              glassTrigger: true,
+              actions: [
+                MusicMenuAction('整理音源', Icons.graphic_eq,
+                    () => ui.openOrganization(_tracks)),
                 if (_ingestible.isNotEmpty)
-                  PopupMenuItem(
-                    value: 'ingest',
-                    enabled: !_ingesting,
-                    child: Text(_ingesting ? '入库中…' : '一键入库',
-                        style: TextStyle(color: _ingesting ? MX.dim : MX.fg)),
-                  ),
-                PopupMenuItem(value: 'play', child: Text('播放', style: TextStyle(color: MX.fg))),
+                  MusicMenuAction(_ingesting ? '入库中…' : '一键入库',
+                      Icons.download, _confirmIngest,
+                      enabled: !_ingesting),
+                MusicMenuAction('播放', Icons.play_arrow,
+                    () => player.replaceQueue(_tracks, start: 0)),
               ],
             ),
         ],

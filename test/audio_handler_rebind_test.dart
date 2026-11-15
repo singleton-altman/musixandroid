@@ -44,6 +44,8 @@ class _Store extends ChangeNotifier implements PlayerStore {
   Stream<bool> get favoriteChanges => favorites.stream;
   @override
   Stream<MediaItem?> get mediaItemChanges => const Stream.empty();
+  @override
+  bool get loadingForPlayback => false;
 
   void replace(AudioPlayer next) {
     engine = next;

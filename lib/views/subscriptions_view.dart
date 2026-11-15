@@ -7,6 +7,7 @@ import '../stores/ui_store.dart';
 import '../theme/route.dart';
 import '../theme/theme.dart';
 import 'components.dart';
+import 'glass_controls.dart';
 import 'glass_surfaces.dart';
 
 class _SyncResult {
@@ -126,13 +127,11 @@ class _SubscriptionsViewState extends State<SubscriptionsView> {
   }
 
   Future<void> _openSettings(Subscription sub) async {
-    final deleted = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: MX.panel,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (_) => _SettingsDrawer(sub: sub),
+    final deleted = await showMusicGlassSheet<bool>(
+      context,
+      _SettingsDrawer(sub: sub),
+      halfSize: 0.72,
+      fullSize: 0.94,
     );
     if (deleted == true) _confirmDelete(sub);
   }
@@ -357,22 +356,10 @@ class _SettingsDrawerState extends State<_SettingsDrawer> {
   @override
   Widget build(BuildContext context) {
     final sub = widget.sub;
-    return DraggableScrollableSheet(
-      expand: false,
-      initialChildSize: 0.6,
-      maxChildSize: 0.92,
-      builder: (_, scroll) => ListView(
-        controller: scroll,
-        padding: const EdgeInsets.fromLTRB(20, 14, 20, 32),
-        children: [
-          Center(
-            child: Container(
-              width: 40, height: 4,
-              decoration: BoxDecoration(color: MX.hairline, borderRadius: BorderRadius.circular(2)),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Row(
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
+      children: [
+        Row(
             children: [
               CoverArt(src: sub.coverUrl, size: 56, corner: 12),
               const SizedBox(width: 16),
@@ -408,8 +395,7 @@ class _SettingsDrawerState extends State<_SettingsDrawer> {
             icon: const Icon(Icons.notifications_off, size: 18),
             label: const Text('取消订阅'),
           ),
-        ],
-      ),
+      ],
     );
   }
 

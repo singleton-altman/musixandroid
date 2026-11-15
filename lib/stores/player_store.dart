@@ -153,6 +153,14 @@ class PlayerStore extends ChangeNotifier {
     _wantsPlayback = value;
   }
 
+  /// True while a playback source is being resolved or buffered *with the
+  /// intent to autoplay*. The audio handler broadcasts this window as an
+  /// active "playing" media state so the platform foreground service +
+  /// wakelock engage **before** audio actually starts. Without it, locking
+  /// the screen (or backgrounding the app) mid-resolution lets the OS freeze
+  /// the cached process and every resolve request stalls until foreground.
+  bool get loadingForPlayback => loading && _wantsPlayback;
+
   void _startEnginePlayback(int generation) {
     final engine = _av;
     final task =

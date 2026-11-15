@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:musix/api/api_client.dart';
 import 'package:musix/models/models.dart';
 import 'package:musix/stores/player_store.dart';
@@ -106,9 +107,14 @@ Future<(_IngestAPI, UIStore)> _openFavorites(WidgetTester tester,
   return (session.api, ui);
 }
 
-Future<void> _confirmDialog(WidgetTester tester) async {
-  await tester.tap(find.byTooltip('更多'));
+/// Opens the top-right glass "…" menu of the favorites page.
+Future<void> _openMenu(WidgetTester tester) async {
+  await tester.tap(find.byIcon(Icons.more_horiz));
   await tester.pumpAndSettle();
+}
+
+Future<void> _confirmDialog(WidgetTester tester) async {
+  await _openMenu(tester);
   await tester.tap(find.text('一键入库'));
   await tester.pumpAndSettle();
 }
@@ -137,11 +143,10 @@ void main() {
         ],
       }
     ]);
-    await tester.tap(find.byTooltip('更多'));
-    await tester.pumpAndSettle();
-    final item = find.byWidgetPredicate((widget) =>
-        widget is PopupMenuItem<String> && widget.value == 'ingest');
-    expect(tester.widget<PopupMenuItem<String>>(item).enabled, isFalse);
+    await _openMenu(tester);
+    final item = tester.widget<GlassMenuItem>(
+        find.widgetWithText(GlassMenuItem, '入库中…'));
+    expect(item.enabled, isFalse);
     await tester.tap(find.text('入库中…'));
     await tester.pump();
     expect(api.writes, hasLength(1));
@@ -188,8 +193,7 @@ void main() {
   testWidgets('local favorites retain playback and organize without ingestion',
       (tester) async {
     final (api, _) = await _openFavorites(tester, localOnly: true);
-    await tester.tap(find.byTooltip('更多'));
-    await tester.pumpAndSettle();
+    await _openMenu(tester);
     expect(find.text('一键入库'), findsNothing);
     expect(find.text('整理音源'), findsOneWidget);
     expect(find.text('播放'), findsOneWidget);

@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
+import 'release_notes.dart';
 import 'update_mirror.dart';
 
 /// GitHub Releases based OTA updates.
@@ -66,16 +67,68 @@ class AppUpdateService {
   /// probing would stall for a full timeout on the blocked direct route before
   /// ever reaching the accelerators. Worst case equals a single timeout.
   static Future<ReleaseInfo?> fetchLatest({http.Client? client}) async {
+    final json = await _raceJson(_apiBase, client: client);
+    if (json is! Map) return null;
+    return ReleaseInfo.fromJson(json);
+  }
+
+  /// Release notes for [release], ready to render.
+  ///
+  /// The workflow writes a changelog into the release body; older releases were
+  /// published with an empty body, so those fall back to the commits between
+  /// this build tag and the previous one.
+  static Future<ReleaseNotes> fetchNotes(
+    ReleaseInfo release, {
+    http.Client? client,
+  }) async {
+    final fromBody = ReleaseNotes.parse(release.body);
+    if (!fromBody.isEmpty) return fromBody;
+
+    final number = _buildNumber(release.tagName);
+    if (number == null || number <= 1) return ReleaseNotes.empty;
+    // A failed workflow run leaves no tag behind; walk back a few builds before
+    // giving up so a single skipped release does not hide the whole changelog.
+    for (var step = 1; step <= 4 && number - step >= 1; step++) {
+      final previous = 'build-${number - step}';
+      final json = await _raceJson(
+        'https://api.github.com/repos/$_repo/compare/$previous...${release.tagName}',
+        client: client,
+        timeout: const Duration(seconds: 10),
+      );
+      if (json is! Map) continue;
+      final commits = json['commits'];
+      if (commits is! List || commits.isEmpty) continue;
+      final subjects = <String>[];
+      for (final entry in commits) {
+        if (entry is! Map) continue;
+        final commit = entry['commit'];
+        final message = commit is Map ? commit['message'] as String? : null;
+        if (message == null || message.trim().isEmpty) continue;
+        subjects.add(message.trim().split('\n').first);
+        if (subjects.length >= 40) break;
+      }
+      final notes = ReleaseNotes.fromCommits(subjects);
+      if (!notes.isEmpty) return notes;
+    }
+    return ReleaseNotes.empty;
+  }
+
+  /// Race every mirror and return the first valid JSON answer.
+  static Future<Object?> _raceJson(
+    String apiUrl, {
+    http.Client? client,
+    Duration timeout = const Duration(seconds: 12),
+  }) async {
     final store = UpdateMirrorStore.instance;
     await store.ensureLoaded();
     final routes = store.probeOrder;
     if (routes.isEmpty) return null;
 
-    final completer = Completer<ReleaseInfo?>();
+    final completer = Completer<Object?>();
     var pending = routes.length;
 
-    void settle(ReleaseInfo? info) {
-      if (info != null && !completer.isCompleted) completer.complete(info);
+    void settle(Object? json) {
+      if (json != null && !completer.isCompleted) completer.complete(json);
     }
 
     for (final mirror in routes) {
@@ -83,20 +136,12 @@ class AppUpdateService {
       final httpClient = client ?? http.Client();
       unawaited(() async {
         try {
-          final resp = await httpClient
-              .get(Uri.parse(mirror.resolve(_apiBase)), headers: {
-            'Accept': 'application/vnd.github+json',
-          }).timeout(const Duration(seconds: 12));
+          final resp = await httpClient.get(
+            Uri.parse(mirror.resolve(apiUrl)),
+            headers: const {'Accept': 'application/vnd.github+json'},
+          ).timeout(timeout);
           if (resp.statusCode != 200) return;
-          final json = jsonDecode(utf8.decode(resp.bodyBytes)) as Map;
-          settle(ReleaseInfo(
-            tagName: json['tag_name'] as String? ?? '',
-            displayName:
-                json['name'] as String? ?? json['tag_name'] as String? ?? '',
-            body: json['body'] as String? ?? '',
-            apkUrl: _pickApk(json['assets'] as List? ?? const []),
-            apkSize: _pickApkSize(json['assets'] as List? ?? const []),
-          ));
+          settle(jsonDecode(utf8.decode(resp.bodyBytes)));
         } catch (_) {
           // Route unavailable — another route may still win.
         } finally {
@@ -107,6 +152,13 @@ class AppUpdateService {
       }());
     }
     return completer.future;
+  }
+
+  static final RegExp _tagNumberRe = RegExp(r'build-(\d+)');
+
+  static int? _buildNumber(String tagName) {
+    final match = _tagNumberRe.firstMatch(tagName);
+    return match == null ? null : int.tryParse(match.group(1)!);
   }
 
   static String? _pickApk(List assets) {
@@ -318,13 +370,30 @@ class ReleaseInfo {
   final String body;
   final String? apkUrl;
   final int? apkSize;
+  final DateTime? publishedAt;
+  final String? pageUrl;
   const ReleaseInfo({
     required this.tagName,
     required this.displayName,
     required this.body,
     this.apkUrl,
     this.apkSize,
+    this.publishedAt,
+    this.pageUrl,
   });
+
+  factory ReleaseInfo.fromJson(Map json) => ReleaseInfo(
+        tagName: json['tag_name'] as String? ?? '',
+        displayName:
+            json['name'] as String? ?? json['tag_name'] as String? ?? '',
+        body: json['body'] as String? ?? '',
+        apkUrl: AppUpdateService._pickApk(json['assets'] as List? ?? const []),
+        apkSize:
+            AppUpdateService._pickApkSize(json['assets'] as List? ?? const []),
+        publishedAt:
+            DateTime.tryParse(json['published_at'] as String? ?? '')?.toLocal(),
+        pageUrl: json['html_url'] as String?,
+      );
 
   /// "MusicX 0.8.11(018)" -> "0.8.11(018)".
   String get displayVersion =>

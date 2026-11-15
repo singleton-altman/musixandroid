@@ -3,6 +3,7 @@ import 'package:open_filex/open_filex.dart';
 import 'package:provider/provider.dart';
 
 import '../services/app_update.dart';
+import '../services/release_notes.dart';
 import '../services/update_mirror.dart';
 import '../services/update_speed_tester.dart';
 import '../stores/ui_store.dart';
@@ -13,7 +14,8 @@ import 'glass_surfaces.dart';
 /// 检查更新入口：清理过期安装包后打开更新弹层。
 Future<void> showUpdateSheet(BuildContext context) async {
   AppUpdateService.cleanupExpiredApkCache();
-  await showMusicGlassSheet(context, const _UpdateSheet());
+  await showMusicGlassSheet(context, const _UpdateSheet(),
+      halfSize: 0.72, fullSize: 0.94);
 }
 
 /// 下载线路管理面板。
@@ -34,9 +36,23 @@ class _UpdateSheet extends StatefulWidget {
   State<_UpdateSheet> createState() => _UpdateSheetState();
 }
 
+/// Published date and package size of the release.
+String _releaseMeta(ReleaseInfo release) {
+  final parts = <String>[];
+  final date = release.publishedAt;
+  if (date != null) parts.add('${date.year}年${date.month}月${date.day}日');
+  final size = release.apkSize;
+  if (size != null && size > 0) {
+    parts.add('${(size / (1024 * 1024)).toStringAsFixed(1)} MB');
+  }
+  return parts.join(' · ');
+}
+
 class _UpdateSheetState extends State<_UpdateSheet> {
   _UpdatePhase _phase = _UpdatePhase.checking;
   ReleaseInfo? _release;
+  ReleaseNotes _notes = ReleaseNotes.empty;
+  bool _notesLoading = false;
   String? _error;
   String? _route;
   double _progress = 0;
@@ -69,6 +85,9 @@ class _UpdateSheetState extends State<_UpdateSheet> {
       _phase = _UpdatePhase.checking;
       _error = null;
       _route = null;
+      _release = null;
+      _notes = ReleaseNotes.empty;
+      _notesLoading = false;
     });
     final info = await AppUpdateService.fetchLatest();
     if (!mounted) return;
@@ -79,13 +98,24 @@ class _UpdateSheetState extends State<_UpdateSheet> {
       });
       return;
     }
-    if (!AppUpdateService.isNewer(info.displayVersion)) {
-      setState(() => _phase = _UpdatePhase.upToDate);
-      return;
-    }
+    final newer = AppUpdateService.isNewer(info.displayVersion);
     setState(() {
       _release = info;
-      _phase = _UpdatePhase.available;
+      _phase = newer ? _UpdatePhase.available : _UpdatePhase.upToDate;
+    });
+    _loadNotes(info);
+  }
+
+  Future<void> _loadNotes(ReleaseInfo release) async {
+    setState(() {
+      _notesLoading = true;
+      _notes = ReleaseNotes.empty;
+    });
+    final notes = await AppUpdateService.fetchNotes(release);
+    if (!mounted || _release?.tagName != release.tagName) return;
+    setState(() {
+      _notes = notes;
+      _notesLoading = false;
     });
   }
 
@@ -146,6 +176,167 @@ class _UpdateSheetState extends State<_UpdateSheet> {
     }
   }
 
+  /// Version header: "发现新版本 x" plus the current version underneath.
+  Widget _versionHeader(ColorScheme scheme, {required bool newer}) {
+    final release = _release;
+    if (release == null) return const SizedBox.shrink();
+    final meta = _releaseMeta(release);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: Text(
+                newer ? '发现新版本 ${release.displayVersion}' : '已是最新版本',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    color: scheme.onSurface,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600),
+              ),
+            ),
+            if (!newer)
+              Icon(Icons.check_circle_rounded,
+                  color: const Color(0xFF34C759), size: 20),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          [
+            '当前版本 ${AppUpdateService.currentVersion}',
+            if (meta.isNotEmpty) meta,
+          ].join(' · '),
+          style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12.5),
+        ),
+      ],
+    );
+  }
+
+  /// "更新内容" panel: heading rows with an accent bar, one row per change.
+  Widget _notesSection(ColorScheme scheme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.auto_awesome_motion_rounded, size: 15, color: MX.ember),
+            const SizedBox(width: 6),
+            Text('更新内容',
+                style: TextStyle(
+                    color: scheme.onSurface,
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700)),
+            if (_notes.changeCount > 0) ...[
+              const SizedBox(width: 6),
+              Text('${_notes.changeCount} 项',
+                  style:
+                      TextStyle(color: scheme.onSurfaceVariant, fontSize: 11.5)),
+            ],
+            const Spacer(),
+            if (_notesLoading)
+              SizedBox(
+                width: 13,
+                height: 13,
+                child: CircularProgressIndicator(
+                    strokeWidth: 1.6, color: MX.ember),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(13, 11, 13, 9),
+          decoration: BoxDecoration(
+            color: MX.fillSoft,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: MX.hairline, width: 0.6),
+          ),
+          child: _notesBody(scheme),
+        ),
+      ],
+    );
+  }
+
+  Widget _notesBody(ColorScheme scheme) {
+    if (_notes.isEmpty) {
+      return Text(
+        _notesLoading
+            ? '正在获取更新内容…'
+            : (_release?.body.trim().isEmpty ?? true)
+                ? '该版本未附带更新说明'
+                : '更新说明为空',
+        style: TextStyle(
+            color: scheme.onSurfaceVariant, fontSize: 12.5, height: 1.4),
+      );
+    }
+
+    final children = <Widget>[];
+    for (final block in _notes.blocks) {
+      switch (block.kind) {
+        case ReleaseNoteKind.heading:
+          if (children.isNotEmpty) children.add(const SizedBox(height: 9));
+          children.add(Row(
+            children: [
+              Container(
+                width: 3,
+                height: 12,
+                decoration: BoxDecoration(
+                    color: MX.ember, borderRadius: BorderRadius.circular(2)),
+              ),
+              const SizedBox(width: 7),
+              Expanded(
+                child: Text(block.text,
+                    style: TextStyle(
+                        color: MX.fg,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700)),
+              ),
+            ],
+          ));
+          children.add(const SizedBox(height: 6));
+        case ReleaseNoteKind.bullet:
+          children.add(Padding(
+            padding: const EdgeInsets.only(bottom: 5),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 6.5, right: 8, left: 3),
+                  child: Container(
+                    width: 4,
+                    height: 4,
+                    decoration: BoxDecoration(
+                        color: MX.ember.withValues(alpha: 0.75),
+                        shape: BoxShape.circle),
+                  ),
+                ),
+                Expanded(
+                  child: Text(block.text,
+                      style: TextStyle(
+                          color: scheme.onSurfaceVariant,
+                          fontSize: 12.5,
+                          height: 1.45)),
+                ),
+              ],
+            ),
+          ));
+        case ReleaseNoteKind.text:
+          children.add(Padding(
+            padding: const EdgeInsets.only(bottom: 5),
+            child: Text(block.text,
+                style: TextStyle(
+                    color: MX.dim, fontSize: 12, height: 1.45)),
+          ));
+      }
+    }
+
+    return Column(
+        crossAxisAlignment: CrossAxisAlignment.start, children: children);
+  }
+
   Widget _mirrorRow(ColorScheme scheme) {
     final mirror = _mirrors.selectedMirror;
     return InkWell(
@@ -177,7 +368,9 @@ class _UpdateSheetState extends State<_UpdateSheet> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Padding(
+    // Release notes can be long; the whole sheet scrolls so a bigger changelog
+    // never clips the download button or overflows the glass panel.
+    return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -209,47 +402,28 @@ class _UpdateSheetState extends State<_UpdateSheet> {
                 const SizedBox(height: 16),
                 FilledButton.tonal(onPressed: _fetch, child: const Text('重试')),
               ]),
-            _UpdatePhase.upToDate => Padding(
-                padding: const EdgeInsets.symmetric(vertical: 22),
-                child: Column(children: [
-                  Icon(Icons.check_circle_outline,
-                      color: const Color(0xFF34C759), size: 44),
-                  const SizedBox(height: 10),
-                  Text('已是最新版本 ${AppUpdateService.currentVersion}',
-                      style: TextStyle(color: scheme.onSurface, fontSize: 15)),
-                ]),
+            _UpdatePhase.upToDate => Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _versionHeader(scheme, newer: false),
+                  if (_release != null) ...[
+                    const SizedBox(height: 12),
+                    _notesSection(scheme),
+                  ],
+                ],
               ),
             _UpdatePhase.available => Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('发现新版本 ${_release!.displayVersion}',
-                      style: TextStyle(
-                          color: scheme.onSurface,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 4),
-                  Text('当前版本 ${AppUpdateService.currentVersion}',
-                      style: TextStyle(
-                          color: scheme.onSurfaceVariant, fontSize: 13)),
-                  if (_release!.body.trim().isNotEmpty) ...[
-                    const SizedBox(height: 10),
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxHeight: 150),
-                      child: SingleChildScrollView(
-                        child: Text(_release!.body.trim(),
-                            style: TextStyle(
-                                color: scheme.onSurfaceVariant,
-                                fontSize: 13,
-                                height: 1.45)),
-                      ),
-                    ),
-                  ],
+                  _versionHeader(scheme, newer: true),
+                  const SizedBox(height: 12),
+                  _notesSection(scheme),
                   if (_error != null) ...[
                     const SizedBox(height: 10),
                     Text(_error!,
                         style: TextStyle(color: scheme.error, fontSize: 12.5)),
                   ],
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
                   FilledButton(
                       onPressed: _download,
                       style: FilledButton.styleFrom(

@@ -397,12 +397,16 @@ void showTrackActions(BuildContext context, Track track,
         controller: controller,
         children: [
           for (final action in actions)
-            ListTile(
-              leading: Icon(action.icon,
-                  color: action.destructive ? Colors.red : MX.fg),
-              title: Text(action.title,
-                  style: TextStyle(
-                      color: action.destructive ? Colors.red : MX.fg)),
+            GlassMenuItem(
+              height: 52,
+              maxLines: 2,
+              title: action.title,
+              icon: Icon(action.icon),
+              isDestructive: action.destructive,
+              titleStyle: TextStyle(
+                  color: action.destructive ? Colors.red : MX.fg,
+                  fontSize: 15),
+              iconColor: action.destructive ? Colors.red : MX.fg,
               onTap: () {
                 selected = action.onTap;
                 Navigator.pop(sheetContext);

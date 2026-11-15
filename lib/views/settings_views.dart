@@ -20,7 +20,12 @@ import '../theme/route.dart';
 import '../theme/theme.dart';
 import 'components.dart';
 import 'route_page.dart';
-import 'glass_controls.dart' show showMusicGlassSheet;
+import 'glass_controls.dart'
+    show
+        MusicActionsMenu,
+        MusicMenuAction,
+        MusicSelectButton,
+        showMusicGlassSheet;
 import 'glass_surfaces.dart';
 import 'update_views.dart';
 
@@ -591,23 +596,13 @@ class _SettingsViewState extends State<SettingsView> {
                 Expanded(
                     child: Text('显示模式',
                         style: TextStyle(color: MX.fg, fontSize: 15))),
-                DropdownButtonHideUnderline(
-                  child: DropdownButton<AppearanceMode>(
-                    value: ui.appearance,
-                    dropdownColor: MX.panel,
-                    style: TextStyle(color: MX.fg, fontSize: 14),
-                    icon: Icon(Icons.expand_more, color: MX.mute, size: 18),
-                    items: [
-                      for (final m in AppearanceMode.values)
-                        DropdownMenuItem(
-                            value: m,
-                            child:
-                                Text(m.title, style: TextStyle(color: MX.fg))),
-                    ],
-                    onChanged: (m) {
-                      if (m != null) ui.setAppearance(m, session.local);
-                    },
-                  ),
+                MusicSelectButton<AppearanceMode>(
+                  value: ui.appearance,
+                  menuTitle: '显示模式',
+                  options: [
+                    for (final m in AppearanceMode.values) (m, m.title),
+                  ],
+                  onChanged: (m) => ui.setAppearance(m, session.local),
                 ),
               ],
             ),
@@ -636,14 +631,13 @@ class _SettingsViewState extends State<SettingsView> {
                   ],
                 ),
                 const SizedBox(height: 10),
-                Row(
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
                   children: [
                     for (final accent in ThemeAccent.values)
-                      Padding(
-                        padding: const EdgeInsets.only(right: 12),
-                        child: _accentSwatch(accent, ui.themeAccent == accent,
-                            () => ui.setThemeAccent(accent, session.local)),
-                      ),
+                      _accentSwatch(accent, ui.themeAccent == accent,
+                          () => ui.setThemeAccent(accent, session.local)),
                   ],
                 ),
                 const SizedBox(height: 10),
@@ -809,19 +803,17 @@ class _BackgroundTuneRow extends StatelessWidget {
           child: SliderTheme(
             data: SliderTheme.of(context).copyWith(
               trackHeight: 3,
-              thumbShape:
-                  const RoundSliderThumbShape(enabledThumbRadius: 8),
-              overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
               activeTrackColor: MX.ember,
               inactiveTrackColor: MX.fillStrong,
               thumbColor: MX.ember,
-              overlayColor: MX.ember.withValues(alpha: 0.14),
             ),
-            child: Slider(
-              value: value.clamp(min, max),
+            child: MusicGlassSlider(
+              value: value,
               min: min,
               max: max,
               onChanged: onChanged,
+              thumbRadius: 8,
+              label: label,
             ),
           ),
         ),
@@ -1513,22 +1505,11 @@ class _AutomationViewState extends State<AutomationView> {
         children: [
           Expanded(
               child: Text(label, style: TextStyle(color: MX.fg, fontSize: 15))),
-          DropdownButtonHideUnderline(
-            child: DropdownButton<T>(
-              value: value,
-              dropdownColor: MX.panel,
-              style: TextStyle(color: MX.fg, fontSize: 14),
-              icon: Icon(Icons.expand_more, color: MX.mute, size: 18),
-              items: [
-                for (final o in options)
-                  DropdownMenuItem(
-                      value: o.$1,
-                      child: Text(o.$2, style: TextStyle(color: MX.fg))),
-              ],
-              onChanged: (v) {
-                if (v != null) onChanged(v);
-              },
-            ),
+          MusicSelectButton<T>(
+            value: value,
+            options: options,
+            menuTitle: label,
+            onChanged: onChanged,
           ),
         ],
       );
@@ -2559,34 +2540,24 @@ class _CustomSourcesViewState extends State<CustomSourcesView> {
             ),
           ),
           if (_isAdmin)
-            PopupMenuButton<String>(
-              color: MX.panel,
-              icon: Icon(Icons.more_horiz, color: MX.mute, size: 20),
-              onSelected: (v) {
-                switch (v) {
-                  case 'toggle':
-                    _toggle(s);
-                    break;
-                  case 'export':
-                    _export(s);
-                    break;
-                  case 'delete':
-                    _remove(s);
-                    break;
-                }
-              },
-              itemBuilder: (_) => [
-                PopupMenuItem(
-                    value: 'toggle',
-                    child: Text((s.enabled ?? false) ? '停用' : '启用',
-                        style: TextStyle(color: MX.fg))),
-                PopupMenuItem(
-                    value: 'export',
-                    child: Text('导出脚本', style: TextStyle(color: MX.fg))),
-                const PopupMenuItem(
-                    value: 'delete',
-                    child:
-                        Text('删除', style: TextStyle(color: Colors.redAccent))),
+            MusicActionsMenu(
+              glassTrigger: true,
+              triggerIcon: Icons.more_horiz,
+              triggerLabel: '音源操作',
+              triggerColor: MX.mute,
+              title: s.name ?? s.filename ?? s.id,
+              actions: [
+                MusicMenuAction(
+                  (s.enabled ?? false) ? '停用' : '启用',
+                  (s.enabled ?? false)
+                      ? Icons.pause_circle_outline
+                      : Icons.play_circle_outline,
+                  () => _toggle(s),
+                ),
+                MusicMenuAction(
+                    '导出脚本', Icons.file_download_outlined, () => _export(s)),
+                MusicMenuAction('删除', Icons.delete_outline, () => _remove(s),
+                    destructive: true),
               ],
             ),
         ],
@@ -2775,7 +2746,11 @@ class _AppIconRowState extends State<_AppIconRow> {
 
   void _openPicker() {
     showMusicGlassSheet(
-        context, _AppIconSheet(ui: widget.ui, session: widget.session));
+      context,
+      _AppIconSheet(ui: widget.ui, session: widget.session),
+      halfSize: 0.8,
+      fullSize: 0.95,
+    );
   }
 
   @override
@@ -2819,59 +2794,48 @@ class _AppIconSheet extends StatelessWidget {
   const _AppIconSheet({required this.ui, required this.session});
 
   Future<void> _pick(BuildContext context, AppIconVariant variant) async {
-    final messenger = ScaffoldMessenger.of(context);
     await AppIconService.apply(variant.id, ui, session.local);
-    messenger.showSnackBar(SnackBar(
-      behavior: SnackBarBehavior.floating,
-      duration: const Duration(seconds: 2),
-      content: Text('${variant.name} 已应用，桌面图标稍后刷新'),
-    ));
+    ui.notify('${variant.name} 已应用，桌面图标稍后刷新');
   }
 
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
       listenable: ui,
-      builder: (context, _) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(left: 4, bottom: 12),
-                child: Text('应用图标',
-                    style: TextStyle(
-                        color: MX.fg,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w600)),
-              ),
-              GridView.count(
-                crossAxisCount: 4,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                childAspectRatio: 0.78,
-                mainAxisSpacing: 10,
-                crossAxisSpacing: 10,
-                children: [
-                  for (final variant in AppIconVariant.all)
-                    _AppIconCell(
-                      variant: variant,
-                      selected: ui.appIcon == variant.id,
-                      onTap: () => _pick(context, variant),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Padding(
-                padding: const EdgeInsets.only(left: 4),
-                child: Text('切换后桌面图标会稍作延迟刷新；应用数据不受影响。',
-                    style: TextStyle(color: MX.mute, fontSize: 11.5)),
-              ),
-            ],
+      builder: (context, _) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 14, 20, 12),
+            child: Text('应用图标',
+                style: TextStyle(
+                    color: MX.fg,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w600)),
           ),
-        ),
+          Expanded(
+            child: GridView.count(
+              crossAxisCount: 4,
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              childAspectRatio: 0.68,
+              mainAxisSpacing: 10,
+              crossAxisSpacing: 10,
+              children: [
+                for (final variant in AppIconVariant.all)
+                  _AppIconCell(
+                    variant: variant,
+                    selected: ui.appIcon == variant.id,
+                    onTap: () => _pick(context, variant),
+                  ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 14),
+            child: Text('切换后桌面图标会稍作延迟刷新；应用数据不受影响。',
+                style: TextStyle(color: MX.mute, fontSize: 11.5)),
+          ),
+        ],
       ),
     );
   }

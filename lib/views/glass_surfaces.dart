@@ -117,6 +117,7 @@ class MusicGlassSwitch extends StatelessWidget {
 
 class MusicGlassSlider extends StatelessWidget {
   final double value;
+  final double min;
   final double max;
   final ValueChanged<double>? onChanged;
   final ValueChanged<double>? onChangeEnd;
@@ -125,6 +126,7 @@ class MusicGlassSlider extends StatelessWidget {
   const MusicGlassSlider(
       {super.key,
       required this.value,
+      this.min = 0,
       this.max = 1,
       required this.onChanged,
       this.onChangeEnd,
@@ -137,7 +139,8 @@ class MusicGlassSlider extends StatelessWidget {
     return Semantics(
         label: label,
         child: GlassSlider(
-          value: value.clamp(0.0, max),
+          value: value.clamp(min, max),
+          min: min,
           max: max,
           onChanged: onChanged,
           onChangeEnd: onChangeEnd,

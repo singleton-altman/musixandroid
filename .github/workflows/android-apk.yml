@@ -19,6 +19,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          # Full history + tags: release notes are generated from the commits
+          # since the previous `build-N` tag.
+          fetch-depth: 0
 
       - name: Prepare app version
         run: python3 scripts/prepare_app_version.py --run-number "$GITHUB_RUN_NUMBER"
@@ -105,11 +109,22 @@ jobs:
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
 
+      - name: Generate release notes
+        if: github.event_name == 'push'
+        run: |
+          python3 scripts/generate_release_notes.py \
+            --build-tag "build-$GITHUB_RUN_NUMBER" \
+            --commit "${GITHUB_SHA:0:7}" \
+            --date "$(date -u +%Y-%m-%d)" \
+            --output "$RUNNER_TEMP/release-notes.md"
+          cat "$RUNNER_TEMP/release-notes.md"
+
       - name: Publish GitHub Release
         if: github.event_name == 'push'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
           name: MusicX ${{ env.APP_DISPLAY_VERSION }}
+          body_path: ${{ runner.temp }}/release-notes.md
           files: build/app/outputs/flutter-apk/app-release.apk
           fail_on_unmatched_files: true

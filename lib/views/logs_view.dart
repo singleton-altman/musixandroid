@@ -9,6 +9,7 @@ import '../models/models.dart';
 import '../stores/session_store.dart';
 import '../stores/ui_store.dart';
 import '../theme/theme.dart';
+import 'glass_controls.dart';
 import 'glass_surfaces.dart';
 
 String _enc(String s) => Uri.encodeComponent(s);
@@ -209,30 +210,28 @@ class _ServerLogsViewState extends State<ServerLogsView> {
     );
   }
 
-  Widget _filterMenu() => PopupMenuButton<String>(
-        icon: Icon(Icons.filter_alt_outlined, color: MX.ember),
-        color: MX.panel,
-        onSelected: (v) {
-          setState(() {
-            if (v.startsWith('l:')) _level = v.substring(2);
-            if (v.startsWith('s:')) _scope = v.substring(2);
-          });
-          _refresh();
-        },
-        itemBuilder: (_) => [
-          PopupMenuItem(enabled: false, child: Text('级别', style: TextStyle(color: MX.dim, fontSize: 12))),
-          for (final o in _levelOptions) PopupMenuItem(value: 'l:${o.$1}', child: _check(o.$2, _level == o.$1)),
-          const PopupMenuDivider(),
-          PopupMenuItem(enabled: false, child: Text('范围', style: TextStyle(color: MX.dim, fontSize: 12))),
-          PopupMenuItem(value: 's:all', child: _check('全部范围', _scope == 'all')),
-          for (final s in _scopes) PopupMenuItem(value: 's:$s', child: _check(s, _scope == s)),
-        ],
-      );
-
-  Widget _check(String text, bool on) => Row(
-        children: [
-          Expanded(child: Text(text, style: TextStyle(color: MX.fg))),
-          if (on) Icon(Icons.check, size: 16, color: MX.ember),
+  Widget _filterMenu() => MusicActionsMenu(
+        glassTrigger: true,
+        triggerIcon: Icons.filter_alt_outlined,
+        triggerLabel: '筛选',
+        triggerColor: MX.ember,
+        actions: [
+          const MusicMenuAction.header('级别'),
+          for (final o in _levelOptions)
+            MusicMenuAction(o.$2, null, () {
+              setState(() => _level = o.$1);
+              _refresh();
+            }, selected: _level == o.$1),
+          const MusicMenuAction.header('范围'),
+          MusicMenuAction('全部范围', null, () {
+            setState(() => _scope = 'all');
+            _refresh();
+          }, selected: _scope == 'all'),
+          for (final s in _scopes)
+            MusicMenuAction(s, null, () {
+              setState(() => _scope = s);
+              _refresh();
+            }, selected: _scope == s),
         ],
       );
 
@@ -398,16 +397,14 @@ class _ClientLogsViewState extends State<ClientLogsView> {
             title: Text('客户端日志', style: TextStyle(color: MX.fg, fontWeight: FontWeight.bold)),
             actions: [
               _filterMenu(),
-              PopupMenuButton<String>(
-                icon: Icon(Icons.more_horiz, color: MX.fg),
-                color: MX.panel,
-                onSelected: (v) {
-                  if (v == 'copy') _copyLogs();
-                  if (v == 'clear') _confirmClear();
-                },
-                itemBuilder: (_) => [
-                  PopupMenuItem(value: 'copy', child: Text('复制全部', style: TextStyle(color: MX.fg))),
-                  PopupMenuItem(value: 'clear', child: const Text('清空日志', style: TextStyle(color: Colors.red))),
+              // Same circular glass "…" trigger + anchored glass menu as the
+              // Now Playing page, so every top-right menu in the app matches.
+              MusicActionsMenu(
+                glassTrigger: true,
+                actions: [
+                  MusicMenuAction('复制全部', Icons.copy, _copyLogs),
+                  MusicMenuAction('清空日志', Icons.delete, _confirmClear,
+                      destructive: true),
                 ],
               ),
             ],
@@ -444,29 +441,25 @@ class _ClientLogsViewState extends State<ClientLogsView> {
     );
   }
 
-  Widget _filterMenu() => PopupMenuButton<String>(
-        icon: Icon(Icons.filter_alt_outlined, color: MX.ember),
-        color: MX.panel,
-        onSelected: (v) {
-          setState(() {
-            if (v.startsWith('l:')) _level = v.substring(2);
-            if (v.startsWith('c:')) _category = v.substring(2);
-          });
-        },
-        itemBuilder: (_) => [
-          PopupMenuItem(enabled: false, child: Text('级别', style: TextStyle(color: MX.dim, fontSize: 12))),
-          for (final o in _levelOptions) PopupMenuItem(value: 'l:${o.$1}', child: _check(o.$2, _level == o.$1)),
-          const PopupMenuDivider(),
-          PopupMenuItem(enabled: false, child: Text('分类', style: TextStyle(color: MX.dim, fontSize: 12))),
-          PopupMenuItem(value: 'c:all', child: _check('全部分类', _category == 'all')),
-          for (final c in AppLogCategory.values) PopupMenuItem(value: 'c:${c.name}', child: _check(c.title, _category == c.name)),
-        ],
-      );
-
-  Widget _check(String text, bool on) => Row(
-        children: [
-          Expanded(child: Text(text, style: TextStyle(color: MX.fg))),
-          if (on) Icon(Icons.check, size: 16, color: MX.ember),
+  Widget _filterMenu() => MusicActionsMenu(
+        glassTrigger: true,
+        triggerIcon: Icons.filter_alt_outlined,
+        triggerLabel: '筛选',
+        triggerColor: MX.ember,
+        actions: [
+          const MusicMenuAction.header('级别'),
+          for (final o in _levelOptions)
+            MusicMenuAction(o.$2, null, () {
+              setState(() => _level = o.$1);
+            }, selected: _level == o.$1),
+          const MusicMenuAction.header('分类'),
+          MusicMenuAction('全部分类', null, () {
+            setState(() => _category = 'all');
+          }, selected: _category == 'all'),
+          for (final c in AppLogCategory.values)
+            MusicMenuAction(c.title, null, () {
+              setState(() => _category = c.name);
+            }, selected: _category == c.name),
         ],
       );
 }

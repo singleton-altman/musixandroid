@@ -8,6 +8,7 @@ import '../stores/player_store.dart';
 import '../stores/session_store.dart';
 import '../stores/ui_store.dart';
 import '../theme/theme.dart';
+import 'glass_controls.dart';
 import 'components.dart';
 import 'glass_surfaces.dart';
 
@@ -170,13 +171,11 @@ class _IngestRecordsViewState extends State<IngestRecordsView> {
   Future<void> _openReplacement(IngestJob job) async {
     final session = context.read<SessionStore>();
     final ui = context.read<UIStore>();
-    final next = await showModalBottomSheet<IngestJob>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: MX.panel,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (_) => _ReplacementSheet(job: job, api: session.api),
+    final next = await showMusicGlassSheet<IngestJob>(
+      context,
+      _ReplacementSheet(job: job, api: session.api),
+      halfSize: 0.8,
+      fullSize: 0.95,
     );
     if (next != null) {
       _jobs = _jobs.map((j) => j.id == next.id ? next : j).toList();
@@ -262,36 +261,38 @@ class _IngestRecordsViewState extends State<IngestRecordsView> {
     );
   }
 
-  Widget _filterMenu() => PopupMenuButton<String>(
-        icon: Icon(_filterActive ? Icons.filter_alt : Icons.filter_alt_outlined, color: MX.fg),
-        color: MX.panel,
-        onSelected: (v) {
-          setState(() {
-            if (v.startsWith('p:')) {
-              _platform = v.substring(2);
-            } else if (v.startsWith('s:')) {
-              _status = v.substring(2);
-            }
-            _limit = _pageSize;
-          });
-          _refresh();
-        },
-        itemBuilder: (_) => [
-          PopupMenuItem(enabled: false, child: Text('平台', style: TextStyle(color: MX.dim, fontSize: 12))),
-          PopupMenuItem(value: 'p:all', child: _menuLabel('全部平台', _platform == 'all')),
+  Widget _filterMenu() => MusicActionsMenu(
+        glassTrigger: true,
+        triggerIcon:
+            _filterActive ? Icons.filter_alt : Icons.filter_alt_outlined,
+        triggerLabel: '筛选',
+        triggerColor: MX.fg,
+        actions: [
+          const MusicMenuAction.header('平台'),
+          MusicMenuAction('全部平台', null, () {
+            setState(() {
+              _platform = 'all';
+              _limit = _pageSize;
+            });
+            _refresh();
+          }, selected: _platform == 'all'),
           for (final id in _ingestPlatforms)
-            PopupMenuItem(value: 'p:$id', child: _menuLabel(MX.label(id), _platform == id)),
-          const PopupMenuDivider(),
-          PopupMenuItem(enabled: false, child: Text('状态', style: TextStyle(color: MX.dim, fontSize: 12))),
+            MusicMenuAction(MX.label(id), null, () {
+              setState(() {
+                _platform = id;
+                _limit = _pageSize;
+              });
+              _refresh();
+            }, selected: _platform == id),
+          const MusicMenuAction.header('状态'),
           for (final opt in _statusOptions)
-            PopupMenuItem(value: 's:${opt.$1}', child: _menuLabel(opt.$2, _status == opt.$1)),
-        ],
-      );
-
-  Widget _menuLabel(String text, bool selected) => Row(
-        children: [
-          Expanded(child: Text(text, style: TextStyle(color: MX.fg))),
-          if (selected) Icon(Icons.check, size: 16, color: MX.ember),
+            MusicMenuAction(opt.$2, null, () {
+              setState(() {
+                _status = opt.$1;
+                _limit = _pageSize;
+              });
+              _refresh();
+            }, selected: _status == opt.$1),
         ],
       );
 
@@ -492,46 +493,23 @@ class _IngestJobRow extends StatelessWidget {
 
   void _showMenu(BuildContext context, PlayerStore player) {
     final file = job.file;
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: MX.panel,
-      builder: (_) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (job.status == 'error') ...[
-              if (onReplace != null)
-                ListTile(
-                  leading: Icon(Icons.swap_horiz, color: MX.fg),
-                  title: Text('替换入库', style: TextStyle(color: MX.fg)),
-                  onTap: () { Navigator.pop(context); onReplace!(); },
-                ),
-              ListTile(
-                leading: Icon(Icons.refresh, color: MX.fg),
-                title: Text('重试', style: TextStyle(color: MX.fg)),
-                onTap: () { Navigator.pop(context); onRetry(); },
-              ),
-            ],
-            if (file != null) ...[
-              ListTile(
-                leading: Icon(Icons.play_arrow, color: MX.fg),
-                title: Text('播放', style: TextStyle(color: MX.fg)),
-                onTap: () { Navigator.pop(context); onPlay(); },
-              ),
-              ListTile(
-                leading: Icon(Icons.playlist_play, color: MX.fg),
-                title: Text('下一首播放', style: TextStyle(color: MX.fg)),
-                onTap: () { Navigator.pop(context); player.playNext(file.asTrack()); },
-              ),
-              ListTile(
-                leading: Icon(Icons.playlist_add, color: MX.fg),
-                title: Text('加入队列', style: TextStyle(color: MX.fg)),
-                onTap: () { Navigator.pop(context); player.enqueue(file.asTrack()); },
-              ),
-            ],
-          ],
-        ),
-      ),
+    showMusicGlassActionSheet(
+      context,
+      [
+        if (job.status == 'error') ...[
+          if (onReplace != null)
+            MusicMenuAction('替换入库', Icons.swap_horiz, onReplace),
+          MusicMenuAction('重试', Icons.refresh, onRetry),
+        ],
+        if (file != null) ...[
+          MusicMenuAction('播放', Icons.play_arrow, onPlay),
+          MusicMenuAction('下一首播放', Icons.playlist_play,
+              () => player.playNext(file.asTrack())),
+          MusicMenuAction('加入队列', Icons.playlist_add,
+              () => player.enqueue(file.asTrack())),
+        ],
+      ],
+      title: _title,
     );
   }
 }
@@ -575,23 +553,10 @@ class _ReplacementSheetState extends State<_ReplacementSheet> {
   @override
   Widget build(BuildContext context) {
     final job = widget.job;
-    return DraggableScrollableSheet(
-      expand: false,
-      initialChildSize: 0.7,
-      maxChildSize: 0.92,
-      builder: (_, scroll) => ListView(
-        controller: scroll,
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
-        children: [
-          Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(color: MX.hairline, borderRadius: BorderRadius.circular(2)),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text(job.title ?? job.sourceId ?? '歌曲',
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
+      children: [
+        Text(job.title ?? job.sourceId ?? '歌曲',
               style: TextStyle(color: MX.fg, fontSize: 18, fontWeight: FontWeight.bold)),
           if (job.artists?.isNotEmpty ?? false)
             Padding(
@@ -657,8 +622,7 @@ class _ReplacementSheetState extends State<_ReplacementSheet> {
             const SizedBox(height: 12),
             Text(_error!, style: const TextStyle(color: Colors.red, fontSize: 13)),
           ],
-        ],
-      ),
+      ],
     );
   }
 }

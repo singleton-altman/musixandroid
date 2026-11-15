@@ -100,6 +100,16 @@ void main() {
       'xxxhdpi': 192,
     };
 
+    // Adaptive icon (API 26+) layer canvas is 108dp; legacy PNG sizes above
+    // don't apply to the layers.
+    const layerMipmaps = <String, int>{
+      'mdpi': 108,
+      'hdpi': 162,
+      'xhdpi': 216,
+      'xxhdpi': 324,
+      'xxxhdpi': 432,
+    };
+
     final sheetTiles = <ui.Image>[];
     for (final v in variants) {
       final master = await renderIcon(v, 1024);
@@ -111,6 +121,33 @@ void main() {
         dir.createSync(recursive: true);
         File('${dir.path}/ic_launcher_${v.id}.png').writeAsBytesSync(png);
       }
+      // Adaptive icon layers (background: full-bleed gradient scene,
+      // foreground: glyph shrunk into the 66dp safe zone). Without these the
+      // ColorOS/OnePlus launcher stretches the legacy square PNG to fill its
+      // elongated icon slot — exactly the "图标被拉长" bug.
+      for (final entry in layerMipmaps.entries) {
+        final dir = Directory(
+            '$root/android/app/src/main/res/mipmap-${entry.key}');
+        dir.createSync(recursive: true);
+        final bg = await renderAdaptiveBackground(v, entry.value);
+        File('${dir.path}/ic_launcher_${v.id}_bg.png')
+            .writeAsBytesSync(await imageToPng(bg));
+        bg.dispose();
+        final fg = await renderAdaptiveForeground(v, entry.value);
+        File('${dir.path}/ic_launcher_${v.id}_fg.png')
+            .writeAsBytesSync(await imageToPng(fg));
+        fg.dispose();
+      }
+      final anydpi = Directory(
+          '$root/android/app/src/main/res/mipmap-anydpi-v26');
+      anydpi.createSync(recursive: true);
+      File('${anydpi.path}/ic_launcher_${v.id}.xml').writeAsStringSync('''
+<?xml version="1.0" encoding="utf-8"?>
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@mipmap/ic_launcher_${v.id}_bg"/>
+    <foreground android:drawable="@mipmap/ic_launcher_${v.id}_fg"/>
+</adaptive-icon>
+''');
       // Flutter preview asset (grid picker) + tile for the contact sheet.
       final preview = await scaleToPng(master, 256);
       File('${outAssets.path}/icon_${v.id}.png').writeAsBytesSync(preview);
@@ -175,6 +212,54 @@ Future<ui.Image> renderIcon(IconVariant v, int size) async {
   canvas.scale(size / s);
 
   drawBackground(canvas, v);
+  drawDesign(canvas, v);
+
+  final picture = recorder.endRecording();
+  final image = await picture.toImage(size, size);
+  picture.dispose();
+  return image;
+}
+
+/// Adaptive-icon background layer: the gradient + glow scene, full-bleed.
+/// The launcher mask only reveals the center ~72/108 of the canvas.
+Future<ui.Image> renderAdaptiveBackground(IconVariant v, int size) async {
+  const s = 1024.0;
+  final recorder = ui.PictureRecorder();
+  final canvas = ui.Canvas(recorder);
+  canvas.scale(size / s);
+  drawBackground(canvas, v);
+  final picture = recorder.endRecording();
+  final image = await picture.toImage(size, size);
+  picture.dispose();
+  return image;
+}
+
+/// Adaptive-icon foreground layer: the glyph only, on a transparent canvas,
+/// shrunk about the center so it fits inside the 66dp safe zone. The glyphs
+/// span ~0.71 of the half-canvas at most; 0.84 maps that to ~0.60 < 0.61.
+const _adaptiveGlyphScale = 0.84;
+
+Future<ui.Image> renderAdaptiveForeground(IconVariant v, int size) async {
+  const s = 1024.0;
+  final recorder = ui.PictureRecorder();
+  final canvas = ui.Canvas(recorder);
+  canvas.scale(size / s);
+  canvas.translate(s / 2, s / 2);
+  canvas.scale(_adaptiveGlyphScale);
+  canvas.translate(-s / 2, -s / 2);
+  drawDesign(canvas, v);
+  final picture = recorder.endRecording();
+  final image = await picture.toImage(size, size);
+  picture.dispose();
+  return image;
+}
+
+Future<Uint8List> imageToPng(ui.Image image) async {
+  final data = await image.toByteData(format: ui.ImageByteFormat.png);
+  return data!.buffer.asUint8List();
+}
+
+void drawDesign(ui.Canvas canvas, IconVariant v) {
   switch (v.design) {
     case 'ribbonM':
       drawRibbonM(canvas, v);
@@ -222,11 +307,6 @@ Future<ui.Image> renderIcon(IconVariant v, int size) async {
       drawLiquid(canvas, v);
       break;
   }
-
-  final picture = recorder.endRecording();
-  final image = await picture.toImage(size, size);
-  picture.dispose();
-  return image;
 }
 
 void drawBackground(ui.Canvas canvas, IconVariant v) {
