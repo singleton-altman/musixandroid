@@ -84,6 +84,7 @@ class UpdateDownloadController extends ChangeNotifier
         url,
         mirror: chosen,
         expectedBytes: release.apkSize,
+        label: release.displayVersion,
         onProgress: (progress, route) {
           _progress = progress;
           _route = route;

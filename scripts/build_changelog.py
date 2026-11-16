@@ -2,9 +2,9 @@
 
 Every `build-N` tag becomes one diary section: the display version derived the
 same way CI does (scripts/version_scheme.py), the tag date, and the grouped
-notes for the commits between the previous build tag and this one.
-`RELEASE_NOTES.md` wins for the tag it names (hand-written notes), so the
-bundled diary matches the published release body exactly.
+notes for the commits between the previous build tag and this one. Hand-written
+notes archived as `release_notes/<tag>.md` win, so the bundled diary matches the
+published release body exactly.
 """
 
 import argparse
@@ -15,6 +15,7 @@ from pathlib import Path
 
 from generate_release_notes import (
     EMPTY_NOTES,
+    archived_notes,
     build_sections,
     commit_entries,
 )
@@ -108,17 +109,11 @@ def _demote_headings(body):
 
 
 def hand_written_notes(root, tag):
-    """RELEASE_NOTES.md content when it names [tag], else empty."""
-    path = root / 'RELEASE_NOTES.md'
-    if not path.exists():
-        return ''
-    content = path.read_text(encoding='utf-8').strip()
+    """Archived hand-written notes for [tag], demoted to `###` headings."""
+    content = archived_notes(root, tag)
     if not content:
         return ''
-    # Word-boundary match: `build-6` must not match inside `build-66`.
-    if re.search(rf'(?<![\w-]){re.escape(tag)}(?!\d)', content):
-        return _demote_headings(content)
-    return ''
+    return _demote_headings(content)
 
 
 def tag_notes(root, number, tag):

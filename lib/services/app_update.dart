@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
@@ -192,11 +193,17 @@ class AppUpdateService {
   /// return a truncated (but still ZIP-headed) file, which installs as
   /// "解析软件包时出现问题". A size mismatch rejects the file and tries the
   /// next route.
+  ///
+  /// Every GitHub release publishes the same asset name (`app-release.apk`),
+  /// so a name straight from the URL makes all versions indistinguishable on
+  /// disk — users have re-installed a stale copy that way. [label] (version or
+  /// build tag) is folded into the file name instead.
   static Future<File> downloadApk(
     String url, {
     UpdateMirror mirror = const UpdateMirror.direct(),
     bool fallbackToDirect = true,
     int? expectedBytes,
+    String label = '',
     void Function(double progress, String route)? onProgress,
     required bool Function() cancelled,
   }) async {
@@ -212,6 +219,7 @@ class AppUpdateService {
           url,
           current,
           expectedBytes: expectedBytes,
+          label: label,
           onProgress: onProgress,
           cancelled: cancelled,
         );
@@ -231,13 +239,17 @@ class AppUpdateService {
     String url,
     UpdateMirror mirror, {
     int? expectedBytes,
+    String label = '',
     required void Function(double progress, String route)? onProgress,
     required bool Function() cancelled,
   }) async {
     final target = Uri.parse(mirror.resolve(url));
     final dir = await _updateCacheDirectory();
-    final file = File('${dir.path}/${_fileName(target)}');
+    final file = File('${dir.path}/${downloadFileName(target, label)}');
     if (file.existsSync()) file.deleteSync();
+    // Drop packages left over from earlier versions: they are all called
+    // `app-release.apk`, so a stale copy is easy to install by accident.
+    await _purgeOtherApks(dir, keep: file);
 
     final client = http.Client();
     try {
@@ -367,6 +379,19 @@ class AppUpdateService {
     } catch (_) {}
   }
 
+  /// Delete cached APKs other than [keep] so exactly one installable package
+  /// exists at any time.
+  static Future<void> _purgeOtherApks(Directory dir, {File? keep}) async {
+    try {
+      await for (final entity in dir.list(followLinks: false)) {
+        if (entity is! File) continue;
+        if (!entity.path.toLowerCase().endsWith('.apk')) continue;
+        if (keep != null && entity.path == keep.path) continue;
+        _deleteQuietly(entity);
+      }
+    } catch (_) {}
+  }
+
   static Future<Directory> _updateCacheDirectory() async {
     final temp = await getTemporaryDirectory();
     final dir = Directory('${temp.path}/musix_app_updates');
@@ -374,14 +399,30 @@ class AppUpdateService {
     return dir;
   }
 
-  static String _fileName(Uri target) {
-    final segment = target.pathSegments.isEmpty
-        ? ''
-        : target.pathSegments.last.trim();
-    final safe = segment.replaceAll(RegExp(r'[^\w.\-()+]'), '_');
-    if (safe.toLowerCase().endsWith('.apk') && safe.length > 4) return safe;
-    return 'musix-update-${DateTime.now().millisecondsSinceEpoch}.apk';
+  /// File name carries the build tag and the display version, e.g.
+  /// `musix-build-70-0.8.12(002).apk`, because the release asset itself is
+  /// always `app-release.apk`.
+  @visibleForTesting
+  static String downloadFileName(Uri target, String label) {
+    final segments = target.pathSegments;
+    var tag = '';
+    if (segments.length >= 2) {
+      final candidate = segments[segments.length - 2].trim();
+      if (candidate.isNotEmpty && !candidate.contains('.')) tag = candidate;
+    }
+    final parts = <String>[
+      'musix',
+      if (tag.isNotEmpty) tag,
+      if (label.trim().isNotEmpty) label.trim(),
+    ];
+    if (parts.length == 1) {
+      return 'musix-update-${DateTime.now().millisecondsSinceEpoch}.apk';
+    }
+    return '${parts.map(_sanitizeFileName).join('-')}.apk';
   }
+
+  static String _sanitizeFileName(String value) =>
+      value.replaceAll(RegExp(r'[^\w.\-()+]+'), '_');
 
   static void _deleteQuietly(File file) {
     try {

@@ -136,6 +136,45 @@ def previous_tag(root):
                 '--match', 'build-*').strip()
 
 
+# Hand-written notes are archived per build tag: `release_notes/build-70.md`.
+# A single shared file was ambiguous — overwriting it for a new release also
+# rewrote the notes of every older version inside the bundled diary.
+NOTES_DIR = 'release_notes'
+
+
+def archived_notes(root, tag):
+    """Archived notes for exactly one build tag, else ''."""
+    if not tag:
+        return ''
+    path = root / NOTES_DIR / f'{tag}.md'
+    if not path.is_file():
+        return ''
+    return path.read_text(encoding='utf-8').strip()
+
+
+def hand_written_notes(root, tag, extra=''):
+    """Hand-written notes for [tag], or '' when there are none.
+
+    The per-tag archive wins. [extra] (usually `RELEASE_NOTES.md`) is an ad-hoc
+    escape hatch and only counts when it actually mentions the tag, so a stale
+    file can never leak into a newer build.
+    """
+    notes = archived_notes(root, tag)
+    if notes:
+        return notes
+    if not extra or not tag:
+        return ''
+    path = Path(extra)
+    if not path.is_absolute():
+        path = root / extra
+    if not path.is_file():
+        return ''
+    content = path.read_text(encoding='utf-8').strip()
+    if content and re.search(rf'(?<![\w-]){re.escape(tag)}(?!\d)', content):
+        return content
+    return ''
+
+
 def commit_entries(root, since_tag, limit=60, until='HEAD'):
     """Collect commit subjects plus bullet lines from their bodies.
 
@@ -182,20 +221,18 @@ def main():
     footer = ' · '.join(part for part in
                         (args.build_tag, args.commit, args.date) if part)
 
-    if args.override and args.build_tag:
-        override_path = Path(args.override)
-        if override_path.exists():
-            content = override_path.read_text(encoding='utf-8').strip()
-            if content and args.build_tag in content:
-                notes = content + '\n\n---\n' + footer + '\n' if footer \
-                    else content + '\n'
-                if args.output:
-                    Path(args.output).write_text(notes, encoding='utf-8')
-                    print(f'Release notes: hand-written override '
-                          f'({override_path}).', file=sys.stderr)
-                else:
-                    print(notes, end='')
-                return
+    if args.build_tag:
+        content = hand_written_notes(root, args.build_tag, args.override)
+        if content:
+            notes = content + '\n\n---\n' + footer + '\n' if footer \
+                else content + '\n'
+            if args.output:
+                Path(args.output).write_text(notes, encoding='utf-8')
+                print(f'Release notes: hand-written notes for '
+                      f'{args.build_tag}.', file=sys.stderr)
+            else:
+                print(notes, end='')
+            return
 
     since = args.from_tag if args.from_tag is not None else previous_tag(root)
     entries = commit_entries(root, since)
