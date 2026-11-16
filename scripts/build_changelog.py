@@ -1,11 +1,13 @@
 """Build the bundled update diary (assets/changelog.md) from build tags.
 
-The diary is grouped by base version (`0.8.12`), not per build: one section per
-base with merged, de-duplicated items, a `### 子版本` list, then one detail
-section per build tag. Single-build bases and tags without a known version fall
-back to the legacy one-section-per-build format. Hand-written notes archived as
-`release_notes/<tag>.md` win, so the bundled diary matches the published
-release body exactly.
+The diary is grouped by **base version** only: one section per base (`0.7.8`,
+`0.8.11`, `0.8.12`) carrying the merged, de-duplicated items of every build in
+that base, with no per-build detail. A base stays open until `pubspec.yaml`
+moves to the next one, so the newest group keeps growing on every release.
+
+A hand-written summary wins for the group body: `release_notes/<base>.md`
+(e.g. `release_notes/0.7.8.md`). Without one the diary merges the commit-derived
+notes of that base's builds.
 """
 
 import argparse
@@ -146,7 +148,7 @@ def _known_tags(root):
 
 
 # ===========================================================================
-# Diary rendering: base-version groups + per-build detail sections
+# Diary rendering: one section per base version, no sub-version detail
 # ===========================================================================
 
 MAX_MERGED_PER_GROUP = 20
@@ -156,10 +158,10 @@ _NOTE_BULLET_RE = re.compile(r'^[-*]\s+(.+?)\s*$')
 _BASE_OF_RE = re.compile(r'^(\d+\.\d+\.\d+)\(')
 
 
-def _base_of(title, tag):
-    """Base version behind a display title; unknown versions fall back to tag."""
+def base_of_title(title):
+    """Base version behind a display title, or None for pre-scheme tags."""
     match = _BASE_OF_RE.match(title or '')
-    return match.group(1) if match else tag
+    return match.group(1) if match else None
 
 
 def _item_key(text):
@@ -227,87 +229,105 @@ def merge_notes(bodies):
         lines.extend(f'- {item}' for item in shown)
         dropped = len(items) - len(shown)
         if dropped > 0:
-            lines.append(f'- … 另有 {dropped} 项同组改动已合并，见子版本明细')
+            lines.append(f'- … 另有 {dropped} 项同组改动已合并')
         lines.append('')
     return '\n'.join(lines).strip()
 
 
-def render_diary(sections):
-    """Render grouped diary markdown from ascending sections.
+def group_entries(entries):
+    """Fold ascending entries into base-version groups.
 
-    [sections] is a list of (tag, title, date, notes_markdown), oldest first.
-    Consecutive sections sharing one base version collapse into a single
-    `## <base> · <from> ~ <to>` group with merged notes and per-build detail
-    sections; single-build groups keep the legacy one-section format.
+    [entries] is `[{'tag', 'title', 'date', 'notes'}]`, oldest first. Tags from
+    before the version scheme have no base: they join the preceding group, or
+    (when they come first) the earliest known group.
     """
-    lines = ['# 更新日记', '']
-    index = 0
-    total = len(sections)
-    while index < total:
-        tag, title, date, body = sections[index]
-        base = _base_of(title, tag)
-        group = [sections[index]]
-        probe = index + 1
-        while probe < total and _base_of(sections[probe][1],
-                                         sections[probe][0]) == base:
-            group.append(sections[probe])
-            probe += 1
-        index = probe
-
-        if len(group) == 1 or base == tag:
-            single = group[0]
-            header = f'## {single[1]} · {single[0]} · {single[2]}' \
-                if single[1] != single[0] else f'## {single[0]} · {single[2]}'
-            lines.extend([header, '', single[3] or EMPTY_NOTES, ''])
+    groups = []
+    legacy = []
+    for entry in entries:
+        base = base_of_title(entry['title'])
+        if base is None:
+            if groups:
+                groups[-1]['entries'].append(entry)
+            else:
+                legacy.append(entry)
             continue
+        if groups and groups[-1]['base'] == base:
+            groups[-1]['entries'].append(entry)
+        else:
+            groups.append({'base': base, 'entries': [entry]})
+    if legacy:
+        if groups:
+            groups[0]['entries'] = legacy + groups[0]['entries']
+        else:
+            groups.append({'base': '', 'entries': legacy})
+    return groups
 
-        lines.append(f'## {base} · {group[0][2]} ~ {group[-1][2]}')
-        lines.append('')
-        merged = merge_notes([s[3] for s in group
-                              if s[3] and s[3] != EMPTY_NOTES])
-        lines.append(merged or EMPTY_NOTES)
-        lines.append('')
-        lines.append('### 子版本')
-        for entry in reversed(group):
-            lines.append(f'- {entry[1]} · {entry[0]} · {entry[2]}')
-        lines.append('')
-        for entry in reversed(group):
-            header = f'## {entry[0]} · {entry[1]} · {entry[2]}' \
-                if entry[1] != entry[0] else f'## {entry[0]} · {entry[2]}'
-            lines.extend([header, '', entry[3] or EMPTY_NOTES, ''])
+
+def group_body(root, group):
+    """Hand-written base summary if archived, else merged build notes."""
+    base = group['base']
+    if base:
+        written = _demote_headings(archived_notes(root, base))
+        if written:
+            return written
+    return merge_notes([entry['notes'] for entry in group['entries']
+                        if entry['notes'] and entry['notes'] != EMPTY_NOTES])
+
+
+def render_diary(groups, bodies):
+    """Render the diary markdown; [bodies] parallels [groups]."""
+    lines = ['# 更新日记', '']
+    for group, body in zip(groups, bodies):
+        entries = group['entries']
+        first = entries[0]['date']
+        last = entries[-1]['date']
+        title = group['base'] or entries[-1]['tag']
+        header = f'## {title} · {first}' if first == last \
+            else f'## {title} · {first} ~ {last}'
+        lines.extend([header, '', body or EMPTY_NOTES, ''])
     return '\n'.join(lines).strip() + '\n'
 
 
 def render_changelog(root, current_tag='', current_date='',
                      current_run_number=0):
-    """Collect sections from git and render the grouped diary."""
+    """Collect entries from git and render the base-version diary."""
     tags = build_tags(root)
     bases = tag_bases(root, tags)
-    sections = []
+    entries = []
     for number, tag in tags:
-        title = tag_title(root, number, tag, bases) or tag
-        sections.append((tag, title, tag_date(root, tag),
-                         tag_notes(root, number, tag)))
+        entries.append({
+            'tag': tag,
+            'title': tag_title(root, number, tag, bases) or tag,
+            'date': tag_date(root, tag),
+            'notes': tag_notes(root, number, tag),
+        })
 
     # CI runs before the tag exists: append the in-flight build from HEAD.
     match = TAG_RE.match(current_tag)
-    if match and not any(section[0] == current_tag for section in sections):
+    if match and not any(entry['tag'] == current_tag for entry in entries):
         body = hand_written_notes(root, current_tag)
         if not body:
             previous = _git(root, 'describe', '--tags', '--abbrev=0',
                             '--match', 'build-*').strip()
-            entries = commit_entries(root, previous, limit=60)
             body_lines = []
-            for title, items in build_sections(entries):
+            for title, items in build_sections(
+                    commit_entries(root, previous, limit=60)):
                 body_lines.append(f'### {title}')
                 body_lines.extend(f'- {item}' for item in items[:12])
                 body_lines.append('')
             body = '\n'.join(body_lines).strip()
         if body:
-            title = head_title(root, current_run_number, bases) or current_tag
-            sections.append((current_tag, title, current_date, body))
+            entries.append({
+                'tag': current_tag,
+                'title': head_title(root, current_run_number, bases)
+                or current_tag,
+                'date': current_date,
+                'notes': body,
+            })
 
-    return render_diary(sections)
+    groups = group_entries(entries)
+    bodies = [group_body(root, group) for group in groups]
+    return render_diary(groups, bodies)
 
 
 def main():
@@ -331,10 +351,8 @@ def main():
                              current_run_number=args.current_run_number)
     if args.output:
         Path(args.output).write_text(diary, encoding='utf-8')
-        groups = len(re.findall(r'\n## \d+\.\d+\.\d+ · ', diary))
-        builds = len(re.findall(r'\n## (?:.+\n)?', diary))
-        print(f'Update diary: {groups} base version(s), '
-              f'{builds} section(s).', file=sys.stderr)
+        groups = len(re.findall(r'\n## ', diary))
+        print(f'Update diary: {groups} base version(s).', file=sys.stderr)
     else:
         print(diary, end='')
 

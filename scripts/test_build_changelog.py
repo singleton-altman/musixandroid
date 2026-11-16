@@ -1,15 +1,27 @@
 import unittest
+from pathlib import Path
+import tempfile
 
 from build_changelog import (
     EMPTY_NOTES,
+    base_of_title,
+    group_body,
+    group_entries,
     merge_notes,
     parse_note_blocks,
     render_diary,
 )
 
 
-def section(tag, title, date, body):
-    return (tag, title, date, body)
+def entry(tag, title, date, notes=''):
+    return {'tag': tag, 'title': title, 'date': date, 'notes': notes}
+
+
+def render(entries, bodies=None):
+    groups = group_entries(entries)
+    if bodies is None:
+        bodies = [merge_notes([e['notes'] for e in g['entries']]) for g in groups]
+    return render_diary(groups, bodies)
 
 
 class ParseNoteBlocksTest(unittest.TestCase):
@@ -58,64 +70,112 @@ class MergeNotesTest(unittest.TestCase):
         self.assertEqual(merge_notes(['', EMPTY_NOTES]), '')
 
 
+class BaseOfTitleTest(unittest.TestCase):
+    def test_display_version_yields_base(self):
+        self.assertEqual(base_of_title('0.8.12(003)'), '0.8.12')
+
+    def test_pre_scheme_tag_yields_none(self):
+        self.assertIsNone(base_of_title('build-7'))
+        self.assertIsNone(base_of_title(''))
+
+
+class GroupEntriesTest(unittest.TestCase):
+    def test_same_base_collapses_into_one_group(self):
+        groups = group_entries([
+            entry('build-69', '0.8.12(001)', '2026-11-16'),
+            entry('build-70', '0.8.12(002)', '2026-11-16'),
+            entry('build-71', '0.8.12(003)', '2026-11-17'),
+        ])
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(groups[0]['base'], '0.8.12')
+        self.assertEqual(len(groups[0]['entries']), 3)
+
+    def test_new_base_starts_a_new_group(self):
+        groups = group_entries([
+            entry('build-40', '0.7.8(001)', '2026-10-07'),
+            entry('build-56', '0.8.11(014)', '2026-11-01'),
+            entry('build-69', '0.8.12(001)', '2026-11-16'),
+        ])
+        self.assertEqual([g['base'] for g in groups], ['0.7.8', '0.8.11', '0.8.12'])
+
+    def test_legacy_tags_fold_into_earliest_group(self):
+        groups = group_entries([
+            entry('build-7', 'build-7', '2026-09-23'),
+            entry('build-8', 'build-8', '2026-09-23'),
+            entry('build-43', '0.7.8(001)', '2026-10-07'),
+        ])
+        self.assertEqual([g['base'] for g in groups], ['0.7.8'])
+        self.assertEqual(len(groups[0]['entries']), 3)
+
+    def test_legacy_tags_after_a_group_join_it(self):
+        groups = group_entries([
+            entry('build-43', '0.7.8(001)', '2026-10-07'),
+            entry('build-44', 'build-44', '2026-10-08'),
+        ])
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(len(groups[0]['entries']), 2)
+
+
 class RenderDiaryTest(unittest.TestCase):
-    def test_multi_build_base_collapses_into_group(self):
-        diary = render_diary([
-            section('build-69', '0.8.12(001)', '2026-11-16',
-                    '### 新功能\n- 后台下载\n'),
-            section('build-70', '0.8.12(002)', '2026-11-16',
-                    '### 问题修复\n- 版本化文件名\n'),
-        ])
-        self.assertIn('## 0.8.12 · 2026-11-16 ~ 2026-11-16', diary)
-        self.assertIn('- 后台下载', diary)
-        self.assertIn('- 版本化文件名', diary)
-        self.assertIn('### 子版本', diary)
-        # 子版本 newest first
-        sub = diary.split('### 子版本')[1].split('## ')[0]
-        self.assertLess(sub.index('build-70'), sub.index('build-69'))
-        # detail sections follow the group, newest first
-        self.assertIn('## build-70 · 0.8.12(002) · 2026-11-16', diary)
-        self.assertIn('## build-69 · 0.8.12(001) · 2026-11-16', diary)
-
-    def test_single_build_base_keeps_legacy_format(self):
-        diary = render_diary([
-            section('build-69', '0.8.12(001)', '2026-11-16',
-                    '### 新功能\n- 只此一版\n'),
-        ])
-        self.assertIn('## 0.8.12(001) · build-69 · 2026-11-16', diary)
-        self.assertNotIn('### 子版本', diary)
-        self.assertNotIn('## 0.8.12 ·', diary)
-
-    def test_unknown_base_falls_back_to_tag(self):
-        diary = render_diary([
-            section('build-7', 'build-7', '2026-09-23', EMPTY_NOTES),
-        ])
-        self.assertIn('## build-7 · 2026-09-23', diary)
-        self.assertIn(EMPTY_NOTES, diary)
-
-    def test_groups_keep_file_order_old_to_new(self):
-        diary = render_diary([
-            section('build-1', '0.7.8(001)', '2026-09-01',
-                    '### 新功能\n- 甲\n'),
-            section('build-2', '0.7.8(002)', '2026-09-02',
-                    '### 新功能\n- 乙\n'),
-            section('build-3', '0.8.0(001)', '2026-09-03',
-                    '### 新功能\n- 丙\n'),
-        ])
-        self.assertLess(diary.index('## 0.7.8 ·'), diary.index('## build-1 ·'))
-        self.assertLess(diary.index('## build-1 ·'), diary.index('0.8.0(001)'))
-
-    def test_in_flight_build_joins_its_base_group(self):
-        diary = render_diary([
-            section('build-69', '0.8.12(001)', '2026-11-16',
-                    '### 新功能\n- 后台下载\n'),
-            section('build-70', '0.8.12(002)', '2026-11-16',
-                    '### 问题修复\n- 版本化文件名\n'),
-            section('build-71', '0.8.12(003)', '2026-11-17',
-                    '### 问题修复\n- 日记聚合\n'),
+    def test_one_section_per_base_with_merged_items(self):
+        diary = render([
+            entry('build-69', '0.8.12(001)', '2026-11-16',
+                  '### 新功能\n- 后台下载\n'),
+            entry('build-70', '0.8.12(002)', '2026-11-17',
+                  '### 问题修复\n- 版本化文件名\n'),
         ])
         self.assertIn('## 0.8.12 · 2026-11-16 ~ 2026-11-17', diary)
-        self.assertIn('- 0.8.12(003) · build-71 · 2026-11-17', diary)
+        self.assertIn('- 后台下载', diary)
+        self.assertIn('- 版本化文件名', diary)
+        # 不再有子版本清单与每个 build 的明细节
+        self.assertNotIn('### 子版本', diary)
+        self.assertNotIn('build-69', diary)
+        self.assertNotIn('build-70', diary)
+        self.assertEqual(diary.count('\n## '), 1)
+
+    def test_single_date_header_when_group_spans_one_day(self):
+        diary = render([
+            entry('build-72', '0.8.12(004)', '2026-11-16', '### 新功能\n- 甲\n'),
+        ])
+        self.assertIn('## 0.8.12 · 2026-11-16\n', diary)
+
+    def test_groups_keep_old_to_new_order(self):
+        diary = render([
+            entry('build-40', '0.7.8(001)', '2026-10-07', '### 新功能\n- 甲\n'),
+            entry('build-56', '0.8.11(014)', '2026-11-01', '### 新功能\n- 乙\n'),
+            entry('build-69', '0.8.12(001)', '2026-11-16', '### 新功能\n- 丙\n'),
+        ])
+        self.assertLess(diary.index('## 0.7.8 ·'), diary.index('## 0.8.11 ·'))
+        self.assertLess(diary.index('## 0.8.11 ·'), diary.index('## 0.8.12 ·'))
+
+    def test_empty_notes_use_placeholder(self):
+        diary = render([entry('build-7', 'build-7', '2026-09-23', EMPTY_NOTES)])
+        self.assertIn(EMPTY_NOTES, diary)
+
+
+class GroupBodyTest(unittest.TestCase):
+    def test_hand_written_summary_wins(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'release_notes').mkdir()
+            (root / 'release_notes' / '0.8.12.md').write_text(
+                '## 界面\n- 手写条目\n', encoding='utf-8')
+            group = {'base': '0.8.12', 'entries': [
+                entry('build-70', '0.8.12(002)', '2026-11-17',
+                      '### 新功能\n- 自动条目\n'),
+            ]}
+            body = group_body(root, group)
+            self.assertIn('### 界面', body)
+            self.assertIn('- 手写条目', body)
+            self.assertNotIn('自动条目', body)
+
+    def test_falls_back_to_merged_notes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            group = {'base': '0.9.0', 'entries': [
+                entry('build-80', '0.9.0(001)', '2026-12-01',
+                      '### 新功能\n- 自动条目\n'),
+            ]}
+            self.assertIn('- 自动条目', group_body(Path(tmp), group))
 
 
 if __name__ == '__main__':
