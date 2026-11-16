@@ -4,122 +4,115 @@
 
 # MusicX
 
-**液态玻璃风格的 Android 音乐播放器，连你自己的音乐服务器。**
+**A liquid-glass music player for Android that streams from your own music server.**
 
-歌在自己的硬盘里，界面在自己手里。
+Your music lives on your own disk. The interface stays in your hands.
 
 [![Release](https://img.shields.io/github/v/release/singleton-altman/musixandroid?style=flat-square&color=7C6CFF&label=release)](https://github.com/singleton-altman/musixandroid/releases/latest)
 [![Stars](https://img.shields.io/github/stars/singleton-altman/musixandroid?style=flat-square&color=7C6CFF)](https://github.com/singleton-altman/musixandroid/stargazers)
 [![Last Commit](https://img.shields.io/github/last-commit/singleton-altman/musixandroid?style=flat-square&color=7C6CFF)](https://github.com/singleton-altman/musixandroid/commits/main)
 [![Flutter](https://img.shields.io/badge/Flutter-3.47.4-54C5F8?style=flat-square&logo=flutter&logoColor=white)](https://flutter.dev)
-[![Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84?style=flat-square&logo=android&logoColor=white)](#环境要求)
+[![Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84?style=flat-square&logo=android&logoColor=white)](#requirements)
 
-[**下载 APK**](https://github.com/singleton-altman/musixandroid/releases/latest)　·　[快速开始](#三步开始)　·　[反馈问题](https://github.com/singleton-altman/musixandroid/issues)　·　[技术架构](#技术架构)
+[**Download APK**](https://github.com/singleton-altman/musixandroid/releases/latest)　·　[Quick start](#quick-start)　·　[Issues](https://github.com/singleton-altman/musixandroid/issues)　·　[Architecture](#architecture)　·　**English** / [中文](README.zh-CN.md)
 
 </div>
 
 ---
 
-## 这是什么
+## What is this
 
-一个**给自托管音乐服务器用的 Android 客户端**（纯 Flutter 实现）。
+An **Android client for a self-hosted music server** (written in pure Flutter).
 
-服务器跑在你自己的电脑、NAS 或 VPS 上，歌都在自己硬盘里；手机装这个 App 连上去，就能听歌、翻歌单、收每日推荐、管播放队列。不用开电脑、不用开网页，也不经过任何第三方云。
+The server runs on your own computer, NAS or VPS, and the music sits on your own disks. Install this app on your phone, point it at the server, and you can play music, browse playlists, receive a daily recommendation and manage the queue. No need to keep a desktop or a browser open, and nothing passes through a third-party cloud.
 
-## 三步开始
+## Quick start
 
-|  | 做什么 | 说明 |
+|  | What to do | Details |
 | :-: | --- | --- |
-| **1** | 启动音乐服务器 | 需要 Musix Hub 兼容的 REST API，跑在你自己的设备上 |
-| **2** | 下载并安装 APK | 从 [Releases](https://github.com/singleton-altman/musixandroid/releases/latest) 取最新版，Android 8.0 以上 |
-| **3** | 填入地址与密码 | 打开 App 输入服务器地址，登录后即开始同步曲库 |
+| **1** | Start your music server | Needs a Musix Hub compatible REST API running on your own device |
+| **2** | Download and install the APK | Grab the latest from [Releases](https://github.com/singleton-altman/musixandroid/releases/latest), Android 8.0 or newer |
+| **3** | Enter address and password | Open the app, type the server address, and the library starts syncing once you sign in |
 
-## 环境要求
+## Requirements
 
-| 项目 | 要求 |
+| Item | Requirement |
 | --- | --- |
-| 手机系统 | Android 8.0+（minSdk 26） |
-| 服务端 | 已部署的 Musix Hub 兼容服务（默认 `http://127.0.0.1:8080`） |
-| 网络 | 局域网直连，或经反向代理 / 内网穿透访问 |
+| Phone OS | Android 8.0+ (minSdk 26) |
+| Server | A deployed Musix Hub compatible service (defaults to `http://127.0.0.1:8080`) |
+| Network | Direct LAN access, or reachable through a reverse proxy / tunnel |
 
-> 首次登录只需**地址 + 密码**，连接信息仅用于访问你的个人音乐库，不上传任何第三方。
+> The first sign-in only needs an **address + password**. Connection details are used solely to reach your own library and are never uploaded to any third party.
 
-## 构建
+## Build
 
-构建使用 Flutter **3.47.4**（GitHub Actions 已固定此版本）。`liquid_glass_widgets 1.17.1` 要求 Flutter 至少 3.41.0，旧版 3.24 无法编译。
+Built with Flutter **3.47.4** (pinned in GitHub Actions). `liquid_glass_widgets 1.17.1` requires Flutter 3.41.0 or newer; the older 3.24 cannot compile.
 
 <details>
-<summary><b>首次构建（Windows）</b></summary>
+<summary><b>First build (Windows)</b></summary>
 
 <br>
 
-工程只包含手写的源码与 Android 配置，Gradle wrapper / gradlew / 启动图标等自动生成文件需由 Flutter 补齐：
+The repository ships only hand-written source and Android configuration, so Gradle wrapper / gradlew / launcher icons and other generated scaffolding have to be filled in by Flutter:
 
 ```bash
-# 1) 让 Flutter 生成 gradle wrapper、gradlew、图标等缺失的脚手架文件
-#    （会保留已存在的 lib/、pubspec.yaml、android/app/src 下的手写文件）
+# 1) Let Flutter generate the missing scaffolding
+#    (gradle wrapper, gradlew, icons — existing lib/, pubspec.yaml and
+#     hand-written files under android/app/src are kept)
 flutter create --platforms=android --org com.musix .
 
-# 2) 拉取依赖
+# 2) Fetch dependencies
 flutter pub get
 
-# 3) 构建 APK
+# 3) Build the APK
 flutter build apk --release
-# 产物：build/app/outputs/flutter-apk/app-release.apk
+# Output: build/app/outputs/flutter-apk/app-release.apk
 ```
 
-> 若 `flutter create` 覆盖了 `AndroidManifest.xml`，用 git 恢复本仓库版本（内含 cleartext HTTP、音频前台服务、musicx:// deep link、桌面小组件声明）。
+> If `flutter create` overwrites `AndroidManifest.xml`, restore this repository's version with git — it carries cleartext HTTP, the audio foreground service, the `musicx://` deep link and the home-screen widget declarations.
 
 </details>
 
-## 技术架构
+## Architecture
 
-- 播放音频交由原生播放器读取 HTTP 流（支持 Range 和鉴权头），保留 3–5 分钟原生内存预缓冲；切歌与加载超时会隔离旧引擎，锁屏控制随新引擎重新绑定
-- 服务端为 Musix Hub REST API，Cookie 鉴权 `musix_session` + 反向代理 cookie，响应信封 `{result:{status,data,error}}`
+- Audio playback is delegated to the native player reading HTTP streams (Range requests plus auth headers), keeping a 3–5 minute native in-memory pre-buffer; on track changes and load timeouts the old engine is isolated and lock-screen controls rebind to the new engine
+- The server is a Musix Hub REST API: cookie auth `musix_session` along with the reverse-proxy cookie, responses wrapped as `{result:{status,data,error}}`
 
-| 职责 | 实现 |
+| Responsibility | Implementation |
 | --- | --- |
-| 状态管理 | `provider` + `ChangeNotifier`（`lib/stores/`）|
-| 网络层 | `lib/api/`，Cookie 鉴权与统一响应信封解析 |
-| 播放引擎 | `just_audio` + `audio_service`，原生播放器读 HTTP 流并自定义 Cookie header |
-| 图片加载 | `cached_network_image` + Cookie header |
-| 本地持久化 | `shared_preferences`（`lib/local/`）|
-| 锁屏 / 通知 | `audio_service` 媒体会话 |
-| 桌面小组件 | `home_widget` + Android AppWidget |
-| 封面取色 | `palette_generator` |
-| 图标切换 | 22 个 `activity-alias` + `PackageManager.setComponentEnabledSetting` |
-| 应用内更新 | GitHub Releases + 多线路加速 / 测速 / 后台下载（`lib/services/`）|
+| State management | `provider` + `ChangeNotifier` (`lib/stores/`) |
+| Networking | `lib/api/`, cookie auth and unified response-envelope parsing |
+| Playback engine | `just_audio` + `audio_service`, native player reads HTTP streams with a custom cookie header |
+| Image loading | `cached_network_image` with cookie header |
+| Local persistence | `shared_preferences` (`lib/local/`) |
+| Lock screen / notifications | `audio_service` media session |
+| Home-screen widget | `home_widget` + Android AppWidget |
+| Cover colour extraction | `palette_generator` |
+| Icon switching | 22 `activity-alias` entries + `PackageManager.setComponentEnabledSetting` |
+| In-app updates | GitHub Releases with multi-line acceleration / speed test / background download (`lib/services/`) |
 
-## 项目结构
+## Project structure
 
 ```
 lib/
-├── app.dart            # 应用入口与根布局
-├── theme/              # 液态玻璃材质、路由转场、背景层
-├── views/              # 主页、播放器、设置、更新等页面
-├── services/           # 更新线路、测速、图标切换等服务
-├── stores/             # UI 状态管理
-├── local/              # 本地持久化偏好
+├── app.dart            # app entry and root layout
+├── theme/              # liquid-glass materials, route transitions, background layers
+├── views/              # home, player, settings, update and other pages
+├── services/           # update mirrors, speed test, icon switching
+├── stores/             # UI state management
+├── local/              # local persistence preferences
 └── ...
-android/                # 平台壳工程（activity-alias 图标切换等）
-tool/                   # 图标 / 横幅生成脚本（dart:ui、Pillow 程序化绘制）
+android/                # platform shell (activity-alias icon switching, etc.)
+tool/                   # icon / banner generation scripts (dart:ui, Pillow)
 ```
 
 ---
 
 <div align="center">
 
-## English
-
 <sub>
 
-**MusicX** is a liquid-glass music player for Android that streams from your own self-hosted server.
-
-Your library stays on your hardware. No account, no cloud, no third party.
-
-Built with Flutter 3.47.4 · Requires Android 8.0+ · Updates ship through GitHub Releases.
-
-[**Download**](https://github.com/singleton-altman/musixandroid/releases/latest)　·　[**Issues**](https://github.com/singleton-altman/musixandroid/issues)
+Chinese documentation: [**README.zh-CN.md**](README.zh-CN.md)
 
 </sub>
 
