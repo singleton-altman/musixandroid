@@ -27,7 +27,11 @@ rootProject.file('version.properties').withInputStream { versionProperties.load(
 def versionCodeOffset = versionProperties.getProperty('versionCodeOffset').toInteger()
 def buildSequence = flutterVersionCode.toInteger()
 if (buildSequence < 1) throw new GradleException('Build sequence must be positive.')
-def displayVersion = "${flutterVersionName}(${String.format('%03d', buildSequence)})"
+// CI exports APP_DISPLAY_VERSION (e.g. 0.8.12(003)) whose sequence restarts
+// per base version; gradle's own run-number suffix (071) would disagree with
+// what the app and the installer comparison show, so prefer the env value.
+def envDisplayVersion = System.getenv('APP_DISPLAY_VERSION')
+def displayVersion = envDisplayVersion ?: "${flutterVersionName}(${String.format('%03d', buildSequence)})"
 
 def signingProperties = new Properties()
 def signingPropertiesFile = rootProject.file('key.properties')
