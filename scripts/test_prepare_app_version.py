@@ -1,6 +1,7 @@
 import unittest
 
 from prepare_app_version import build_version
+from version_scheme import RUN_NUMBER_EPOCH, effective_build_number
 
 PUBSPEC = 'version: 0.8.11+1\n'
 PROPERTIES = 'versionCodeOffset=42\n'
@@ -81,6 +82,25 @@ class PerBaseVersionTests(unittest.TestCase):
             history.append((run, base))
         self.assertEqual(codes, sorted(codes))
         self.assertEqual(len(set(codes)), len(codes))
+
+
+class RepositoryMoveTests(unittest.TestCase):
+    """The move to a new repository restarts GITHUB_RUN_NUMBER at 1."""
+
+    def test_first_run_of_new_home_continues_the_old_counter(self):
+        self.assertEqual(effective_build_number(1), RUN_NUMBER_EPOCH + 1)
+
+    def test_build_number_stays_monotonic_across_the_move(self):
+        last_old_build = 73
+        self.assertGreater(effective_build_number(1), last_old_build)
+
+    def test_moved_build_keeps_counting_the_same_base_sequence(self):
+        history = [(n, '0.8.12') for n in range(69, 74)]
+        version = build_version(
+            'version: 0.8.12+1\n', PROPERTIES, effective_build_number(1),
+            tag_bases=history)
+        self.assertEqual(version['APP_DISPLAY_VERSION'], '0.8.12(006)')
+        self.assertEqual(version['APP_BUILD_NUMBER'], '74')
 
 
 if __name__ == '__main__':

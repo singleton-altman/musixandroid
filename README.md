@@ -38,6 +38,8 @@ Release 构建使用同一份 PKCS12 密钥，禁止回退到临时 debug 签名
 
 显示版本从 `0.7.8(001)` 开始，后续新构建依次为 `0.7.8(002)`、`0.7.8(003)`。括号内序号为工作流 `github.run_number` 减去 `android/version.properties` 的固定基数 42，至少补齐三位；失败或取消的构建也占用序号，重跑同次构建不变。Android 内部 `versionCode` 仍为序号加 42，以兼容之前已发布的 APK。不要重置该基数。设置页、APK 系统信息和 Release 标题使用同一显示版本。主版本只在修改 `pubspec.yaml` 时改变。
 
+仓库已迁移至 `singleton-altman/musixandroid`，新仓库的 `GITHUB_RUN_NUMBER` 从 1 重新计数，因此 `scripts/version_scheme.py` 的 `RUN_NUMBER_EPOCH = 73` 会把运行序号平移成全局构建号：新仓库第 1 次运行为 `build-74`、`versionCode` 74、显示版本 `0.8.12(006)`。标签、Release 名与 `versionCode` 一律取平移后的 `APP_BUILD_TAG` / `APP_BUILD_NUMBER`，不要再用 `github.run_number` 拼标签，否则会与旧构建的 `build-1…build-73` 冲突、并让 `versionCode` 倒退导致无法覆盖安装。
+
 本地构建从被 Git 忽略的 `android/key.properties` 读取 `storeFile`（绝对路径）、`storePassword`、`keyAlias` 和 `keyPassword`，也可以使用对应的 `ANDROID_KEYSTORE_PATH`、`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS`、`ANDROID_KEY_PASSWORD` 环境变量。不要提交密钥库或密码文件。
 
 首次配置脚本：`scripts/configure_android_signing.py --backup-dir <仓库外的备份目录> --upload`，需要 Python、PyNaCl、OpenSSL 及有仓库管理权限的 GitHub Git 凭据。脚本只生成一次密钥，不覆盖已有 GitHub 签名 Secrets；已固定指纹后，必须恢复原备份，不得重新生成。

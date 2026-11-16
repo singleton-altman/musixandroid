@@ -18,8 +18,20 @@ import re
 # First build that uses per-base-version sequencing.
 SEQUENCE_RESET_TAG = 69
 
+# The project moved to a new GitHub repository (singleton-altman/musixandroid),
+# which restarts GITHUB_RUN_NUMBER at 1. Everything that has to stay monotonic
+# across the move — the `build-N` tags and the Android versionCode — is shifted
+# by the last build made in the old repository, so the first run in the new home
+# continues as build-74 instead of colliding with the existing build-1 tag.
+RUN_NUMBER_EPOCH = 73
+
 VERSION_RE = re.compile(r'^version:\s*(\d+\.\d+\.\d+)\+\d+\s*$', re.MULTILINE)
 OFFSET_RE = re.compile(r'^versionCodeOffset=(\d+)\s*$', re.MULTILINE)
+
+
+def effective_build_number(run_number):
+    """Workflow run number of the new repository → global build number."""
+    return run_number + RUN_NUMBER_EPOCH
 
 
 def parse_base(pubspec):
