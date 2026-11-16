@@ -46,7 +46,7 @@ class UpdateSpeedTester {
 
   /// 没有 APK 地址时的测速目标，保证测的仍是同一条 GitHub 下载链路。
   static const String fallbackProbeUrl =
-      'https://github.com/xiaojun5270/msx/archive/refs/heads/main.zip';
+      'https://github.com/singleton-altman/musixandroid/archive/refs/heads/main.zip';
 
   static Future<MirrorSpeedResult> test(
     UpdateMirror mirror, {

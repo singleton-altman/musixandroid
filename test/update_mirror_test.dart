@@ -5,7 +5,7 @@ import 'package:musix/services/app_update.dart';
 import 'package:musix/services/update_mirror.dart';
 
 void main() {
-  const source = 'https://github.com/xiaojun5270/msx/releases/download/x/app.apk';
+  const source = 'https://github.com/singleton-altman/musixandroid/releases/download/x/app.apk';
 
   group('UpdateMirror.resolve', () {
     test('direct returns the source url untouched', () {

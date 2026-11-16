@@ -10,7 +10,7 @@ void main() {
     test('folds build tag and display version into the name', () {
       final name = AppUpdateService.downloadFileName(
         Uri.parse(
-            'https://github.com/xiaojun5270/msx/releases/download/build-70/app-release.apk'),
+            'https://github.com/singleton-altman/musixandroid/releases/download/build-70/app-release.apk'),
         '0.8.12(002)',
       );
       expect(name, 'musix-build-70-0.8.12(002).apk');
@@ -19,12 +19,12 @@ void main() {
     test('distinct versions never share a file name', () {
       final a = AppUpdateService.downloadFileName(
         Uri.parse(
-            'https://github.com/xiaojun5270/msx/releases/download/build-69/app-release.apk'),
+            'https://github.com/singleton-altman/musixandroid/releases/download/build-69/app-release.apk'),
         '0.8.12(001)',
       );
       final b = AppUpdateService.downloadFileName(
         Uri.parse(
-            'https://github.com/xiaojun5270/msx/releases/download/build-70/app-release.apk'),
+            'https://github.com/singleton-altman/musixandroid/releases/download/build-70/app-release.apk'),
         '0.8.12(002)',
       );
       expect(a, isNot(b));
@@ -33,7 +33,7 @@ void main() {
     test('falls back to the asset stem when no label is given', () {
       final name = AppUpdateService.downloadFileName(
         Uri.parse(
-            'https://github.com/xiaojun5270/msx/releases/download/build-70/app-release.apk'),
+            'https://github.com/singleton-altman/musixandroid/releases/download/build-70/app-release.apk'),
         '',
       );
       expect(name, 'musix-build-70.apk');

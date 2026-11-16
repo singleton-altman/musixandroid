@@ -10,7 +10,7 @@ class CertificateVerificationTests(unittest.TestCase):
 
     def test_actual_failed_github_build_report(self):
         # Downloaded from the apk-signing-diagnostics artifact of:
-        # https://github.com/xiaojun5270/msx/actions/runs/37627587520
+        # https://github.com/singleton-altman/musixandroid/actions/runs/37627587520
         report = (Path(__file__).parent / 'fixtures/apksigner-run-37627587520.txt').read_text()
         self.assertEqual(verify_report(report, self.expected), self.expected)
 

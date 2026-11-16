@@ -49,7 +49,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--openssl', default='openssl')
     parser.add_argument('--backup-dir', type=Path, required=True)
-    parser.add_argument('--repo', default='xiaojun5270/msx')
+    parser.add_argument('--repo', default='singleton-altman/musixandroid')
     parser.add_argument('--upload', action='store_true')
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]

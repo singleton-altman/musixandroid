@@ -22,7 +22,7 @@ import 'update_mirror.dart';
 class AppUpdateService {
   AppUpdateService._();
 
-  static const _repo = 'xiaojun5270/msx';
+  static const _repo = 'singleton-altman/musixandroid';
   static const _apiBase = 'https://api.github.com/repos/$_repo/releases/latest';
 
   /// Downloaded APKs older than this are pruned on the next update.
