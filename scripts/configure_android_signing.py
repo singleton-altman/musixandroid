@@ -51,6 +51,10 @@ def main():
     parser.add_argument('--backup-dir', type=Path, required=True)
     parser.add_argument('--repo', default='singleton-altman/musixandroid')
     parser.add_argument('--upload', action='store_true')
+    parser.add_argument('--rotate', action='store_true',
+                        help='Deliberately replace a pinned key and the existing '
+                             'GitHub signing secrets. Already published builds then '
+                             'have to be uninstalled before they can be updated.')
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     backup = args.backup_dir.resolve()
@@ -62,7 +66,7 @@ def main():
 
     if keystore.exists() != credentials_file.exists():
         raise RuntimeError('Incomplete signing backup: restore the missing file; do not rotate the key.')
-    if fingerprint_file.exists() and not keystore.exists():
+    if fingerprint_file.exists() and not keystore.exists() and not args.rotate:
         raise RuntimeError('A release certificate is already pinned. Restore its backup instead of generating another key.')
 
     backup.mkdir(parents=True, exist_ok=True)
@@ -92,7 +96,8 @@ def main():
                    '-clcerts', '-nokeys', '-passin', 'env:MUSIX_SIGNING_PASSWORD'], env=env)
     cert_der = run([args.openssl, 'x509', '-outform', 'DER'], input=cert_pem)
     fingerprint = hashlib.sha256(cert_der).hexdigest()
-    if fingerprint_file.exists() and fingerprint_file.read_text().strip() != fingerprint:
+    if (fingerprint_file.exists() and not args.rotate
+            and fingerprint_file.read_text().strip() != fingerprint):
         raise RuntimeError('The backup does not match the pinned release certificate.')
     fingerprint_file.write_text(fingerprint + '\n', encoding='ascii')
     (backup / 'certificate.sha256').write_text(fingerprint + '\n', encoding='ascii')
@@ -119,8 +124,9 @@ def main():
         }
         existing = request(api + '?per_page=100', headers)
         conflicts = {secret['name'] for secret in existing['secrets']} & values.keys()
-        if conflicts:
-            raise RuntimeError('Signing secrets already exist; refusing to overwrite them.')
+        if conflicts and not args.rotate:
+            raise RuntimeError('Signing secrets already exist; refusing to overwrite them. '
+                               'Pass --rotate to replace them deliberately.')
         public = request(api + '/public-key', headers)
         box = SealedBox(PublicKey(base64.b64decode(public['key'])))
         for name, value in values.items():

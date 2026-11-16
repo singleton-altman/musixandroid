@@ -36,6 +36,8 @@ Release 构建使用同一份 PKCS12 密钥，禁止回退到临时 debug 签名
 
 构建后使用 `apksigner verify` 校验 APK，并与 `android/signing-certificate.sha256` 的固定公钥指纹比较，签名不一致不会上传或发布。
 
+> **签名轮换（2026-11-16，随仓库迁移）**：旧发布密钥只存在于旧仓库 Secrets，无法迁移，已用 `scripts/configure_android_signing.py --backup-dir <仓库外目录> --repo singleton-altman/musixandroid --upload --rotate` 生成新密钥并写入新仓库 Secrets，固定指纹更新为 `24a72b66…99dd82`。备份在 `E:\backup\musix-signing`（`musix-release.p12` + `signing-credentials.json`），**这是密钥的唯一本地副本，请离线保存**。因签名变化，迁移前已安装的 APK 必须先卸载才能安装新包。除本次轮换外，不得再改指纹或重新生成密钥。
+
 显示版本从 `0.7.8(001)` 开始，后续新构建依次为 `0.7.8(002)`、`0.7.8(003)`。括号内序号为工作流 `github.run_number` 减去 `android/version.properties` 的固定基数 42，至少补齐三位；失败或取消的构建也占用序号，重跑同次构建不变。Android 内部 `versionCode` 仍为序号加 42，以兼容之前已发布的 APK。不要重置该基数。设置页、APK 系统信息和 Release 标题使用同一显示版本。主版本只在修改 `pubspec.yaml` 时改变。
 
 仓库已迁移至 `singleton-altman/musixandroid`，新仓库的 `GITHUB_RUN_NUMBER` 从 1 重新计数，因此 `scripts/version_scheme.py` 的 `RUN_NUMBER_EPOCH = 73` 会把运行序号平移成全局构建号：新仓库第 1 次运行为 `build-74`、`versionCode` 74、显示版本 `0.8.12(006)`。标签、Release 名与 `versionCode` 一律取平移后的 `APP_BUILD_TAG` / `APP_BUILD_NUMBER`，不要再用 `github.run_number` 拼标签，否则会与旧构建的 `build-1…build-73` 冲突、并让 `versionCode` 倒退导致无法覆盖安装。
