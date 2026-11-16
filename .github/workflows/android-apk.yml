@@ -63,9 +63,19 @@ jobs:
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
 
       - name: Test
+        shell: bash
         run: |
-          flutter test
-          python3 -m unittest discover -s scripts -p 'test_*.py'
+          # 测试脚本只保留在本地仓库，公开仓库里没有；有则跑，无则跳过。
+          if [ -d test ] && compgen -G "test/*_test.dart" > /dev/null; then
+            flutter test
+          else
+            echo "No Flutter tests in repo — skipped."
+          fi
+          if compgen -G "scripts/test_*.py" > /dev/null; then
+            python3 -m unittest discover -s scripts -p 'test_*.py'
+          else
+            echo "No Python tests in repo — skipped."
+          fi
 
       - name: Restore fixed release keystore
         env:

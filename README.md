@@ -1,21 +1,20 @@
 <div align="center">
 
-![MusicX](docs/banner.png)
+<img src="docs/banner.png" alt="MusicX" width="100%">
 
 # MusicX
 
-**液态玻璃 UI 音乐播放器** —— 连接你的个人媒体库，全平台聚合、歌单管理、无缝续播，一个 App 畅听整个曲库。
+**液态玻璃风格的 Android 音乐播放器，连你自己的音乐服务器。**
 
-[![Stars](https://img.shields.io/github/stars/singleton-altman/musixandroid?style=flat&color=7C6CFF)](https://github.com/singleton-altman/musixandroid/stargazers)
-[![Forks](https://img.shields.io/github/forks/singleton-altman/musixandroid?style=flat&color=7C6CFF)](https://github.com/singleton-altman/musixandroid/network/members)
-[![Issues](https://img.shields.io/github/issues/singleton-altman/musixandroid?style=flat&color=7C6CFF)](https://github.com/singleton-altman/musixandroid/issues)
-[![Release](https://img.shields.io/github/v/release/singleton-altman/musixandroid?style=flat&color=7C6CFF&label=Release)](https://github.com/singleton-altman/musixandroid/releases/latest)
-[![Last Commit](https://img.shields.io/github/last-commit/singleton-altman/musixandroid?style=flat&color=7C6CFF)](https://github.com/singleton-altman/musixandroid/commits/main)
-[![Top Language](https://img.shields.io/github/languages/top/singleton-altman/musixandroid?style=flat&color=7C6CFF)](https://github.com/singleton-altman/musixandroid)
+歌在自己的硬盘里，界面在自己手里。
 
-[⬇️ 下载 APK](https://github.com/singleton-altman/musixandroid/releases/latest) · [🐛 反馈问题](https://github.com/singleton-altman/musixandroid/issues) · [💡 功能建议](https://github.com/singleton-altman/musixandroid/issues)
+[![Release](https://img.shields.io/github/v/release/singleton-altman/musixandroid?style=flat-square&color=7C6CFF&label=release)](https://github.com/singleton-altman/musixandroid/releases/latest)
+[![Stars](https://img.shields.io/github/stars/singleton-altman/musixandroid?style=flat-square&color=7C6CFF)](https://github.com/singleton-altman/musixandroid/stargazers)
+[![Last Commit](https://img.shields.io/github/last-commit/singleton-altman/musixandroid?style=flat-square&color=7C6CFF)](https://github.com/singleton-altman/musixandroid/commits/main)
+[![Flutter](https://img.shields.io/badge/Flutter-3.47.4-54C5F8?style=flat-square&logo=flutter&logoColor=white)](https://flutter.dev)
+[![Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84?style=flat-square&logo=android&logoColor=white)](#环境要求)
 
-`Flutter` `Android` `Liquid Glass` `Glassmorphism` `Music Player` `Self-hosted` `Material 3`
+[**下载 APK**](https://github.com/singleton-altman/musixandroid/releases/latest)　·　[快速开始](#三步开始)　·　[反馈问题](https://github.com/singleton-altman/musixandroid/issues)　·　[技术架构](#技术架构)
 
 </div>
 
@@ -23,40 +22,36 @@
 
 ## 这是什么
 
-给自托管音乐服务器用的 **Android 客户端**（纯 Flutter 实现）。服务器放在家里 / NAS / VPS 上，手机装这个 App，就能听歌、看歌单、追每日推荐、管理队列，不用再开电脑开网页。
+一个**给自托管音乐服务器用的 Android 客户端**（纯 Flutter 实现）。
 
-## 功能
+服务器跑在你自己的电脑、NAS 或 VPS 上，歌都在自己硬盘里；手机装这个 App 连上去，就能听歌、翻歌单、收每日推荐、管播放队列。不用开电脑、不用开网页，也不经过任何第三方云。
 
-- **个人媒体库** —— 连接自托管音乐服务器，支持多平台账号绑定与订阅任务，随处无缝续播
-- **全平台聚合** —— 猜你喜欢、每日推荐、每日私享，跨平台随机推荐封面轮换
-- **液态玻璃 UI** —— 页面、弹层、播放条全场景玻璃质感，基于 `liquid_glass_widgets`
-- **界面材质切换** —— 液态玻璃（折射透镜，默认）/ 毛玻璃（平磨砂）一键切换，实时生效并持久化
-- **随机背景图** —— 多行背景图接口直链，模糊度（0–30px）与不透明度（20–100%）实时调节
-- **22 款应用图标** —— 液态玻璃（默认）、经典霓虹、复古黑胶、霓虹耳机、复古磁带、吉他拨片、钢琴夜曲等，切换即时生效、数据不受影响
-- **主题与显示模式** —— 多套主题色 + 浅色 / 深色 / 跟随系统
-- **播放体验** —— 播放条快捷控制、队列管理、锁屏 / 通知媒体卡片、正在播放桌面小组件
-- **在线升级** —— 应用内检查更新，多下载线路并行竞速 + 测速选择，后台下载不断歌，安装包完整性校验，失败自动回退直连
+## 三步开始
 
-## 下载
-
-到 [Releases](https://github.com/singleton-altman/musixandroid/releases/latest) 页面下载最新 APK 安装（Android 8.0+）。应用内「设置 → 检查更新」也能直接检测并在后台下载新版本。
+|  | 做什么 | 说明 |
+| :-: | --- | --- |
+| **1** | 启动音乐服务器 | 需要 Musix Hub 兼容的 REST API，跑在你自己的设备上 |
+| **2** | 下载并安装 APK | 从 [Releases](https://github.com/singleton-altman/musixandroid/releases/latest) 取最新版，Android 8.0 以上 |
+| **3** | 填入地址与密码 | 打开 App 输入服务器地址，登录后即开始同步曲库 |
 
 ## 环境要求
 
-- Android 8.0+（minSdk 26）
-- 已部署的自托管音乐服务器（Musix Hub 兼容 REST API）
+| 项目 | 要求 |
+| --- | --- |
+| 手机系统 | Android 8.0+（minSdk 26） |
+| 服务端 | 已部署的 Musix Hub 兼容服务（默认 `http://127.0.0.1:8080`） |
+| 网络 | 局域网直连，或经反向代理 / 内网穿透访问 |
 
-## 使用说明
-
-1. 首次启动输入自托管音乐服务器的**地址与密码**即可登录（默认 `http://127.0.0.1:8080`，连接信息仅用于访问你的个人音乐库）
-2. 在 **设置 → 外观与主题** 中调整显示模式、界面材质、应用图标、主题色与背景图
-3. 切换应用图标后桌面图标会稍作延迟刷新，应用数据不受影响
+> 首次登录只需**地址 + 密码**，连接信息仅用于访问你的个人音乐库，不上传任何第三方。
 
 ## 构建
 
 构建使用 Flutter **3.47.4**（GitHub Actions 已固定此版本）。`liquid_glass_widgets 1.17.1` 要求 Flutter 至少 3.41.0，旧版 3.24 无法编译。
 
-### 首次构建（Windows）
+<details>
+<summary><b>首次构建（Windows）</b></summary>
+
+<br>
 
 工程只包含手写的源码与 Android 配置，Gradle wrapper / gradlew / 启动图标等自动生成文件需由 Flutter 补齐：
 
@@ -75,18 +70,7 @@ flutter build apk --release
 
 > 若 `flutter create` 覆盖了 `AndroidManifest.xml`，用 git 恢复本仓库版本（内含 cleartext HTTP、音频前台服务、musicx:// deep link、桌面小组件声明）。
 
-### 固定 APK 签名
-
-Release 构建使用同一份 PKCS12 密钥，禁止回退到临时 debug 签名。GitHub Actions 从仓库 Secrets 恢复密钥：
-
-- `ANDROID_KEYSTORE_BASE64`：PKCS12 文件的 Base64
-- `ANDROID_KEYSTORE_PASSWORD`：密钥库密码
-- `ANDROID_KEY_ALIAS`：别名
-- `ANDROID_KEY_PASSWORD`：私钥密码
-
-构建后使用 `apksigner verify` 校验 APK，并与 `android/signing-certificate.sha256` 的固定公钥指纹比较，签名不一致不会上传或发布。
-
-本地构建从被 Git 忽略的 `android/key.properties` 读取 `storeFile`（绝对路径）、`storePassword`、`keyAlias` 和 `keyPassword`，也可使用对应的 `ANDROID_KEYSTORE_PATH` 等环境变量。**不要提交密钥库或密码文件。**
+</details>
 
 ## 技术架构
 
@@ -119,21 +103,24 @@ lib/
 └── ...
 android/                # 平台壳工程（activity-alias 图标切换等）
 tool/                   # 图标 / 横幅生成脚本（dart:ui、Pillow 程序化绘制）
-test/                   # 单元与 Widget 测试
 ```
 
-## 测试
+---
 
-```bash
-flutter analyze        # 静态分析
-flutter test           # 全量测试
-```
+<div align="center">
 
 ## English
 
-**MusicX** is a Flutter music player for Android that connects to your self-hosted music server.
+<sub>
 
-- Personal library with cross-platform aggregation, playlists, and seamless playback resume
-- Liquid glass UI with switchable materials (refractive liquid glass / frosted glass), random background with live blur & opacity tuning
-- 22 switchable launcher icons, multiple theme colors, light / dark / system display modes
-- In-app updates with multi-route acceleration, speed test, background download and integrity checks
+**MusicX** is a liquid-glass music player for Android that streams from your own self-hosted server.
+
+Your library stays on your hardware. No account, no cloud, no third party.
+
+Built with Flutter 3.47.4 · Requires Android 8.0+ · Updates ship through GitHub Releases.
+
+[**Download**](https://github.com/singleton-altman/musixandroid/releases/latest)　·　[**Issues**](https://github.com/singleton-altman/musixandroid/issues)
+
+</sub>
+
+</div>

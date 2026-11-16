@@ -48,3 +48,7 @@ app.*.map.json
 dist/
 .workbuddy/
 icon_previews/
+
+# 测试脚本只保留在本地，不提交到公开仓库（CI 会自动跳过）
+/test/
+/scripts/test_*.py

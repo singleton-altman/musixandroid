@@ -61,7 +61,9 @@ gradle.taskGraph.whenReady { graph ->
 android {
     namespace = "com.musix.app"
     compileSdk = 36
-    ndkVersion = flutter.ndkVersion
+    // 固定为 GitHub ubuntu-latest runner 预装的 NDK（27.3），避免 CI 每次现下载
+    // 1 GB 的 flutter.ndkVersion(28.2)——工程无原生代码，仅需满足 AGP 的版本声明。
+    ndkVersion = "27.3.13750724"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
