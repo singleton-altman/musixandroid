@@ -1,9 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
-import 'package:open_filex/open_filex.dart';
 import 'package:provider/provider.dart';
 
 import '../services/app_update.dart';
 import '../services/release_notes.dart';
+import '../services/update_download.dart';
 import '../services/update_history.dart';
 import '../services/update_mirror.dart';
 import '../services/update_speed_tester.dart';
@@ -34,7 +36,7 @@ Future<void> showUpdateHistorySheet(BuildContext context) async {
       halfSize: 0.72, fullSize: 0.94);
 }
 
-enum _UpdatePhase { checking, upToDate, available, downloading, failed }
+enum _UpdatePhase { checking, upToDate, available, failed }
 
 class _UpdateSheet extends StatefulWidget {
   const _UpdateSheet();
@@ -61,16 +63,15 @@ class _UpdateSheetState extends State<_UpdateSheet> {
   ReleaseNotes _notes = ReleaseNotes.empty;
   bool _notesLoading = false;
   String? _error;
-  String? _route;
-  double _progress = 0;
-  bool _cancelled = false;
 
   UpdateMirrorStore get _mirrors => UpdateMirrorStore.instance;
+  UpdateDownloadController get _downloads => UpdateDownloadController.instance;
 
   @override
   void initState() {
     super.initState();
     _mirrors.addListener(_onMirrorChanged);
+    _downloads.addListener(_onMirrorChanged);
     _mirrors.ensureLoaded().then((_) {
       if (mounted) setState(() {});
     });
@@ -80,6 +81,7 @@ class _UpdateSheetState extends State<_UpdateSheet> {
   @override
   void dispose() {
     _mirrors.removeListener(_onMirrorChanged);
+    _downloads.removeListener(_onMirrorChanged);
     super.dispose();
   }
 
@@ -91,7 +93,6 @@ class _UpdateSheetState extends State<_UpdateSheet> {
     setState(() {
       _phase = _UpdatePhase.checking;
       _error = null;
-      _route = null;
       _release = null;
       _notes = ReleaseNotes.empty;
       _notesLoading = false;
@@ -132,55 +133,16 @@ class _UpdateSheetState extends State<_UpdateSheet> {
     setState(() {});
   }
 
+  /// 交给后台下载控制器，立刻关闭弹层让用户继续用 App。
   Future<void> _download() async {
-    final url = _release?.apkUrl;
-    if (url == null) return;
-    _cancelled = false;
-    final mirror = _mirrors.selectedMirror;
-    setState(() {
-      _phase = _UpdatePhase.downloading;
-      _progress = 0;
-      _route = mirror.label;
-    });
-    try {
-      final file = await AppUpdateService.downloadApk(
-        url,
-        mirror: mirror,
-        onProgress: (progress, route) {
-          if (!mounted) return;
-          setState(() {
-            _progress = progress;
-            _route = route;
-          });
-        },
-        cancelled: () => _cancelled,
-      );
-      if (!mounted) return;
-      final result = await OpenFilex.open(file.path,
-          type: 'application/vnd.android.package-archive');
-      if (!mounted) return;
-      Navigator.of(context, rootNavigator: true).pop();
-      if (result.type != ResultType.done) {
-        context.read<UIStore>().notify('无法启动安装器：${result.message}');
-      } else {
-        context.read<UIStore>().notify('已下载完成，请在系统弹窗中确认安装');
-      }
-    } on UpdateCancelled {
-      if (!mounted) return;
-      setState(() => _phase = _UpdatePhase.available);
-    } on UpdateDownloadException catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _phase = _UpdatePhase.available;
-        _error = error.message;
-      });
-    } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _phase = _UpdatePhase.available;
-        _error = '下载失败：$error';
-      });
-    }
+    final release = _release;
+    if (release == null) return;
+    final ui = context.read<UIStore>();
+    final navigator = Navigator.of(context, rootNavigator: true);
+    final starting = _downloads.phase != UpdateDownloadPhase.failed;
+    unawaited(_downloads.start(release));
+    navigator.pop();
+    ui.notify(starting ? '已开始后台下载，完成后会提示安装' : '正在重试下载');
   }
 
   /// Version header: "发现新版本 x" plus the current version underneath.
@@ -391,59 +353,104 @@ class _UpdateSheetState extends State<_UpdateSheet> {
                         style: TextStyle(color: scheme.error, fontSize: 12.5)),
                   ],
                   const SizedBox(height: 14),
-                  FilledButton(
-                      onPressed: _download,
-                      style: FilledButton.styleFrom(
-                          backgroundColor: scheme.primary,
-                          minimumSize: const Size.fromHeight(46)),
-                      child: Text('下载并安装',
-                          style: TextStyle(
-                              color: scheme.onPrimary,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600))),
-                ],
-              ),
-            _UpdatePhase.downloading => Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(children: [
-                    Expanded(
-                        child: ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(
-                          value: _progress <= 0 ? null : _progress,
-                          minHeight: 6,
-                          color: scheme.primary),
-                    )),
-                    const SizedBox(width: 12),
-                    Text(
-                        _progress > 0
-                            ? '${(_progress * 100).floor()}%'
-                            : '连接中',
-                        style: TextStyle(
-                            color: scheme.onSurface,
-                            fontSize: 13,
-                            fontFeatures: const [
-                              FontFeature.tabularFigures()
-                            ])),
-                  ]),
-                  const SizedBox(height: 8),
-                  if (_route != null)
-                    Text('线路：$_route（失败自动回退直连）',
-                        style: TextStyle(
-                            color: scheme.onSurfaceVariant, fontSize: 11.5)),
-                  const SizedBox(height: 14),
-                  FilledButton.tonal(
-                      onPressed: () => _cancelled = true,
-                      style: FilledButton.styleFrom(
-                          minimumSize: const Size.fromHeight(44)),
-                      child: const Text('取消下载')),
+                  _downloadAction(scheme),
                 ],
               ),
           },
         ],
       ),
     );
+  }
+
+  /// 下载状态随控制器走：面板可以随时关掉，下载在后台继续。
+  Widget _downloadAction(ColorScheme scheme) {
+    final downloads = _downloads;
+    if (downloads.busy &&
+        (_release == null ||
+            downloads.version == _release!.displayVersion)) {
+      final percent = (downloads.progress * 100).floor();
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(children: [
+            Expanded(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                    value: downloads.progress <= 0 ? null : downloads.progress,
+                    minHeight: 6,
+                    color: scheme.primary),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text(percent > 0 ? '$percent%' : '连接中',
+                style: TextStyle(
+                    color: scheme.onSurface,
+                    fontSize: 13,
+                    fontFeatures: const [FontFeature.tabularFigures()])),
+          ]),
+          const SizedBox(height: 8),
+          Text('后台下载中 · ${downloads.route}（失败自动回退直连）',
+              style:
+                  TextStyle(color: scheme.onSurfaceVariant, fontSize: 11.5)),
+          const SizedBox(height: 12),
+          FilledButton.tonal(
+              onPressed: downloads.cancel,
+              style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(44)),
+              child: const Text('取消下载')),
+        ],
+      );
+    }
+
+    final ready = downloads.phase == UpdateDownloadPhase.ready &&
+        (_release == null || downloads.version == _release!.displayVersion);
+    if (ready) {
+      return FilledButton(
+          onPressed: downloads.install,
+          style: FilledButton.styleFrom(
+              backgroundColor: scheme.primary,
+              minimumSize: const Size.fromHeight(46)),
+          child: Text('立即安装 ${downloads.version}',
+              style: TextStyle(
+                  color: scheme.onPrimary,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600)));
+    }
+
+    final failed = downloads.phase == UpdateDownloadPhase.failed &&
+        (_release == null || downloads.version == _release!.displayVersion);
+    if (failed) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(downloads.error ?? '下载失败',
+              style: TextStyle(color: scheme.error, fontSize: 12.5)),
+          const SizedBox(height: 10),
+          FilledButton(
+              onPressed: _download,
+              style: FilledButton.styleFrom(
+                  backgroundColor: scheme.primary,
+                  minimumSize: const Size.fromHeight(46)),
+              child: Text('重试下载',
+                  style: TextStyle(
+                      color: scheme.onPrimary,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600))),
+        ],
+      );
+    }
+
+    return FilledButton(
+        onPressed: _download,
+        style: FilledButton.styleFrom(
+            backgroundColor: scheme.primary,
+            minimumSize: const Size.fromHeight(46)),
+        child: Text('下载并安装',
+            style: TextStyle(
+                color: scheme.onPrimary,
+                fontSize: 15,
+                fontWeight: FontWeight.w600)));
   }
 }
 
@@ -1052,6 +1059,135 @@ class _SpeedBadge extends StatelessWidget {
             style: TextStyle(
                 color: foreground, fontSize: 11, fontWeight: FontWeight.w600)),
       ),
+    );
+  }
+}
+
+// ===========================================================================
+// 后台下载横幅：常驻外壳，关掉更新面板也能看到进度
+// ===========================================================================
+
+class UpdateDownloadBanner extends StatelessWidget {
+  const UpdateDownloadBanner({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final downloads = UpdateDownloadController.instance;
+    final scheme = Theme.of(context).colorScheme;
+    return ListenableBuilder(
+      listenable: downloads,
+      builder: (context, _) {
+        if (downloads.phase == UpdateDownloadPhase.idle) {
+          return const SizedBox.shrink();
+        }
+        final phase = downloads.phase;
+        final percent = (downloads.progress * 100).floor();
+        final IconData icon;
+        final String title;
+        final String subtitle;
+        switch (phase) {
+          case UpdateDownloadPhase.downloading:
+            icon = Icons.downloading_rounded;
+            title = '正在下载更新 ${downloads.version}';
+            subtitle = percent > 0
+                ? '$percent% · ${downloads.route}'
+                : '连接中 · ${downloads.route}';
+          case UpdateDownloadPhase.ready:
+            icon = Icons.download_done_rounded;
+            title = '更新已就绪 ${downloads.version}';
+            subtitle = downloads.error ?? '点击安装';
+          case UpdateDownloadPhase.failed:
+            icon = Icons.error_outline_rounded;
+            title = '更新下载失败';
+            subtitle = downloads.error ?? '点击重试';
+          case UpdateDownloadPhase.idle:
+            return const SizedBox.shrink();
+        }
+
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+          child: Material(
+            type: MaterialType.transparency,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: () {
+                switch (phase) {
+                  case UpdateDownloadPhase.ready:
+                    downloads.install();
+                  case UpdateDownloadPhase.failed:
+                    downloads.retry();
+                  case UpdateDownloadPhase.downloading:
+                  case UpdateDownloadPhase.idle:
+                    break;
+                }
+              },
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(12, 9, 8, 9),
+                decoration: BoxDecoration(
+                  color: MX.fillStrong,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: MX.hairline, width: 0.6),
+                ),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: phase == UpdateDownloadPhase.downloading
+                          ? CircularProgressIndicator(
+                              strokeWidth: 2,
+                              value: downloads.progress <= 0
+                                  ? null
+                                  : downloads.progress,
+                              color: MX.ember)
+                          : Icon(icon,
+                              size: 20,
+                              color: phase == UpdateDownloadPhase.failed
+                                  ? scheme.error
+                                  : MX.ember),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                  color: MX.fg,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600)),
+                          const SizedBox(height: 1),
+                          Text(subtitle,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                  color: scheme.onSurfaceVariant,
+                                  fontSize: 11.5)),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: phase == UpdateDownloadPhase.downloading
+                          ? downloads.cancel
+                          : downloads.dismiss,
+                      visualDensity: VisualDensity.compact,
+                      icon: Icon(
+                          phase == UpdateDownloadPhase.downloading
+                              ? Icons.close_rounded
+                              : Icons.keyboard_arrow_down_rounded,
+                          size: 20,
+                          color: scheme.onSurfaceVariant),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

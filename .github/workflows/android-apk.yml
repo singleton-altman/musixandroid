@@ -87,7 +87,7 @@ jobs:
         run: >-
           flutter build apk --release
           --build-name="$APP_BUILD_NAME"
-          --build-number="$APP_BUILD_SEQUENCE"
+          --build-number="$APP_BUILD_NUMBER"
           --dart-define="APP_DISPLAY_VERSION=$APP_DISPLAY_VERSION"
 
       - name: Verify release signing certificate

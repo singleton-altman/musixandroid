@@ -1,8 +1,8 @@
 """Build the bundled update diary (assets/changelog.md) from build tags.
 
 Every `build-N` tag becomes one diary section: the display version derived the
-same way CI does (pubspec base + run_number offset), the tag date, and the
-grouped notes for the commits between the previous build tag and this one.
+same way CI does (scripts/version_scheme.py), the tag date, and the grouped
+notes for the commits between the previous build tag and this one.
 `RELEASE_NOTES.md` wins for the tag it names (hand-written notes), so the
 bundled diary matches the published release body exactly.
 """
@@ -18,10 +18,9 @@ from generate_release_notes import (
     build_sections,
     commit_entries,
 )
+from version_scheme import display_sequence, parse_base, parse_offset
 
 TAG_RE = re.compile(r'^build-(\d+)$')
-VERSION_RE = re.compile(r'^version:\s*(\d+\.\d+\.\d+)\+\d+\s*$', re.MULTILINE)
-OFFSET_RE = re.compile(r'^versionCodeOffset=(\d+)\s*$', re.MULTILINE)
 
 
 def _git(root, *args):
@@ -44,21 +43,33 @@ def build_tags(root):
     return sorted(set(tags))
 
 
-def tag_title(root, number, tag):
-    """Display version for a tag, mirroring prepare_app_version.py."""
-    pubspec = _git(root, 'show', f'{tag}:pubspec.yaml')
-    properties = _git(root, 'show', f'{tag}:android/version.properties')
-    version = VERSION_RE.search(pubspec)
-    offset = OFFSET_RE.search(properties)
-    if version is None or offset is None:
-        return ''
-    sequence = number - int(offset.group(1))
-    if sequence < 1:
-        return ''
-    return f'{version.group(1)}({sequence:03d})'
+def tag_bases(root, tags):
+    """(build_number, base_version) for each tag — needed by the sequence rule."""
+    pairs = []
+    for number, tag in tags:
+        base = parse_base(_git(root, 'show', f'{tag}:pubspec.yaml'))
+        if base:
+            pairs.append((number, base))
+    return pairs
 
 
-def head_title(root, run_number):
+def _title(base, sequence):
+    if not base or sequence is None or sequence < 1:
+        return ''
+    return f'{base}({sequence:03d})'
+
+
+def tag_title(root, number, tag, bases=None):
+    """Display version for a tag, mirroring scripts/version_scheme.py."""
+    base = parse_base(_git(root, 'show', f'{tag}:pubspec.yaml'))
+    offset = parse_offset(_git(root, 'show', f'{tag}:android/version.properties'))
+    if not base:
+        return ''
+    pairs = bases if bases is not None else tag_bases(root, build_tags(root))
+    return _title(base, display_sequence(number, base, pairs, offset))
+
+
+def head_title(root, run_number, bases=None):
     """Display version for the build in flight (tag not created yet)."""
     try:
         pubspec = (root / 'pubspec.yaml').read_text(encoding='utf-8')
@@ -66,8 +77,12 @@ def head_title(root, run_number):
             encoding='utf-8')
     except OSError:
         return ''
-    version = VERSION_RE.search(pubspec)
-    offset = OFFSET_RE.search(properties)
+    base = parse_base(pubspec)
+    offset = parse_offset(properties)
+    if not base or run_number <= 0:
+        return ''
+    pairs = bases if bases is not None else tag_bases(root, build_tags(root))
+    return _title(base, display_sequence(run_number, base, pairs, offset))
     if version is None or offset is None or run_number <= 0:
         return ''
     sequence = run_number - int(offset.group(1))
@@ -142,9 +157,11 @@ def _known_tags(root):
 def render_changelog(root, current_tag='', current_date='',
                      current_run_number=0):
     """Render the diary; tags ascending, optionally plus the in-flight build."""
+    tags = build_tags(root)
+    bases = tag_bases(root, tags)
     sections = []
-    for number, tag in build_tags(root):
-        title = tag_title(root, number, tag) or tag
+    for number, tag in tags:
+        title = tag_title(root, number, tag, bases) or tag
         sections.append((number, tag, tag_date(root, tag), title,
                          tag_notes(root, number, tag)))
 
@@ -163,7 +180,7 @@ def render_changelog(root, current_tag='', current_date='',
                 body_lines.append('')
             body = '\n'.join(body_lines).strip()
         if body:
-            title = head_title(root, current_run_number) or current_tag
+            title = head_title(root, current_run_number, bases) or current_tag
             sections.append((match.group(1), current_tag,
                              current_date, title, body))
 

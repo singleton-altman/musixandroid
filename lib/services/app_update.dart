@@ -187,10 +187,16 @@ class AppUpdateService {
   /// answers with an HTML error page would otherwise leave a broken "APK" on
   /// disk. When an accelerator fails (network error or non-APK payload) and
   /// [fallbackToDirect] is true, direct GitHub is retried once.
+  ///
+  /// [expectedBytes] comes from the release asset metadata: proxies sometimes
+  /// return a truncated (but still ZIP-headed) file, which installs as
+  /// "解析软件包时出现问题". A size mismatch rejects the file and tries the
+  /// next route.
   static Future<File> downloadApk(
     String url, {
     UpdateMirror mirror = const UpdateMirror.direct(),
     bool fallbackToDirect = true,
+    int? expectedBytes,
     void Function(double progress, String route)? onProgress,
     required bool Function() cancelled,
   }) async {
@@ -205,6 +211,7 @@ class AppUpdateService {
         return await _downloadOnce(
           url,
           current,
+          expectedBytes: expectedBytes,
           onProgress: onProgress,
           cancelled: cancelled,
         );
@@ -223,6 +230,7 @@ class AppUpdateService {
   static Future<File> _downloadOnce(
     String url,
     UpdateMirror mirror, {
+    int? expectedBytes,
     required void Function(double progress, String route)? onProgress,
     required bool Function() cancelled,
   }) async {
@@ -276,6 +284,14 @@ class AppUpdateService {
         _deleteQuietly(file);
         throw UpdateDownloadException('${mirror.label} 下载不完整');
       }
+      if (expectedBytes != null &&
+          expectedBytes > 0 &&
+          received != expectedBytes) {
+        _deleteQuietly(file);
+        throw UpdateDownloadException(
+            '${mirror.label} 安装包大小不符（${received ~/ 1024}KB / '
+            '${expectedBytes ~/ 1024}KB），已丢弃');
+      }
       if (!await _looksLikeApk(file)) {
         _deleteQuietly(file);
         throw UpdateDownloadException('${mirror.label} 返回的不是安装包');
@@ -290,24 +306,47 @@ class AppUpdateService {
     }
   }
 
-  /// APK is a ZIP container: the header must be `PK\x03\x04`. Broken
-  /// accelerators tend to answer with an HTML error page instead.
+  /// APK is a ZIP container: the header must be `PK\x03\x04` and the archive
+  /// must end with an end-of-central-directory record. Broken accelerators
+  /// answer with an HTML page, and truncated transfers keep the header but lose
+  /// the trailer — both install as "解析软件包时出现问题".
   static Future<bool> _looksLikeApk(File file) async {
     try {
       final raf = await file.open();
       try {
         final header = await raf.read(4);
-        return header.length >= 4 &&
-            header[0] == 0x50 &&
-            header[1] == 0x4B &&
-            header[2] == 0x03 &&
-            header[3] == 0x04;
+        if (header.length < 4 ||
+            header[0] != 0x50 ||
+            header[1] != 0x4B ||
+            header[2] != 0x03 ||
+            header[3] != 0x04) {
+          return false;
+        }
+        final length = await raf.length();
+        if (length < 22) return false;
+        final tailStart = length > 66560 ? length - 66560 : 0;
+        await raf.setPosition(tailStart);
+        final tail = await raf.read(length - tailStart);
+        return _indexOfSignature(tail) >= 0;
       } finally {
         await raf.close();
       }
     } catch (_) {
       return false;
     }
+  }
+
+  /// Offset of the ZIP end-of-central-directory signature (`PK\x05\x06`).
+  static int _indexOfSignature(List<int> bytes) {
+    for (var i = bytes.length - 22; i >= 0; i--) {
+      if (bytes[i] == 0x50 &&
+          bytes[i + 1] == 0x4B &&
+          bytes[i + 2] == 0x05 &&
+          bytes[i + 3] == 0x06) {
+        return i;
+      }
+    }
+    return -1;
   }
 
   /// Remove leftovers from previous updates so the temp dir does not grow.

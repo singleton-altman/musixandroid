@@ -20,6 +20,7 @@ import 'route_page.dart';
 import 'search_view.dart';
 import 'sheets.dart';
 import 'source_organization_view.dart';
+import 'update_views.dart';
 
 /// The five-tab mobile shell. Mirrors Swift `MobileShell`: one tab each for
 /// 首页 / 资料库 / 最近播放 / 我的 / 搜索, each hosting its own navigation stack,
@@ -179,6 +180,7 @@ class _MobileShellState extends State<MobileShell> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      const UpdateDownloadBanner(),
                       if (player.track != null) const MiniPlayer(),
                       LiquidDock(
                           current: _tab, order: _order, onSelect: _selectTab),
