@@ -88,13 +88,6 @@ Release 构建使用同一份 PKCS12 密钥，禁止回退到临时 debug 签名
 
 本地构建从被 Git 忽略的 `android/key.properties` 读取 `storeFile`（绝对路径）、`storePassword`、`keyAlias` 和 `keyPassword`，也可使用对应的 `ANDROID_KEYSTORE_PATH` 等环境变量。**不要提交密钥库或密码文件。**
 
-### 版本号规则
-
-- 显示版本 `0.8.12(006)`：括号内是**同一基础版本的第 N 个构建**，基础版本（`pubspec.yaml` 的 `version`）升级后从 001 重新计数；失败或取消的构建不占序号。
-- Android `versionCode` = 全局构建号 + `android/version.properties` 的 `versionCodeOffset`（历史偏移 42），始终递增，保证任何已装版本都能被新包覆盖升级。
-- 仓库迁移后 `GITHUB_RUN_NUMBER` 从 1 重算，`scripts/version_scheme.py` 的 `RUN_NUMBER_EPOCH = 73` 负责平移；标签 / Release 名一律取 `APP_BUILD_TAG`（如 `build-79`）。
-- 改 README / docs 的提交不会触发构建（工作流配置了 paths-ignore）。
-
 ## 技术架构
 
 - 播放音频交由原生播放器读取 HTTP 流（支持 Range 和鉴权头），保留 3–5 分钟原生内存预缓冲；切歌与加载超时会隔离旧引擎，锁屏控制随新引擎重新绑定
