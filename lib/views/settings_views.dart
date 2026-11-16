@@ -299,6 +299,10 @@ class _SettingsViewState extends State<SettingsView> {
     await showUpdateSheet(context);
   }
 
+  Future<void> _updateHistory() async {
+    await showUpdateHistorySheet(context);
+  }
+
   String get _serverSubtitle {
     final uri = Uri.tryParse(context.read<SessionStore>().baseURL);
     if (uri != null && uri.host.isNotEmpty) {
@@ -416,6 +420,9 @@ class _SettingsViewState extends State<SettingsView> {
               _divider(),
               _navRow(Icons.system_update, '检查更新', '通过 GitHub Releases 在线升级',
                   const Color(0xFF34C759), _checkForUpdate),
+              _divider(),
+              _navRow(Icons.history_rounded, '更新日记', '全部历史版本的更新内容',
+                  MX.ember, _updateHistory),
             ],
           ),
           const SizedBox(height: 8),
