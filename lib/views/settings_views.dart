@@ -209,6 +209,7 @@ class _SettingsViewState extends State<SettingsView> {
     'netease',
     'qqmusic',
     'kugou',
+    'qishui',
     'apple',
     'navidrome',
     'youtube'
@@ -1768,8 +1769,8 @@ class _PlatformSettingsViewState extends State<PlatformSettingsView> {
   void _stopQr() {
     _qrTimer?.cancel();
     _qrTimer = null;
-    if (id == 'qqmusic' && _qrUnikey != null) {
-      _api.post('/api/bindings/qqmusic/qr/cancel',
+    if (_qrUnikey != null && (id == 'qqmusic' || id == 'qishui')) {
+      _api.post('/api/bindings/$id/qr/cancel',
           json: {'unikey': _qrUnikey}).catchError((_) {});
     }
   }
@@ -2101,6 +2102,13 @@ class _PlatformSettingsViewState extends State<PlatformSettingsView> {
           _field(_cookie, 'Cookie'),
           const SizedBox(height: 14),
           _bindButton(() => _bind({'cookie': _cookie.text.trim()})),
+        ];
+      case 'qishui':
+        return [
+          _pill('抖音扫码绑定', Icons.qr_code, () => _startQr(), filled: true),
+          const SizedBox(height: 14),
+          Text('汽水音乐与抖音同账号，请用抖音 App 完成扫码确认',
+              style: TextStyle(color: MX.mute, fontSize: 12)),
         ];
       case 'apple':
         return [

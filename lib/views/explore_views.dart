@@ -605,7 +605,7 @@ class _ExplorePlaylistsViewState extends State<ExplorePlaylistsView> {
         padding: EdgeInsets.fromLTRB(20, 4, 20, 28 + MediaQuery.paddingOf(context).bottom),
         children: [
           ChipBar(
-            items: const [('all', '全部'), ('apple', 'Apple'), ('netease', '网易云'), ('qqmusic', 'QQ'), ('kugou', '酷狗')],
+            items: const [('all', '全部'), ('apple', 'Apple'), ('netease', '网易云'), ('qqmusic', 'QQ'), ('kugou', '酷狗'), ('qishui', '汽水')],
             selected: _tab,
             onChanged: (v) {
               setState(() {

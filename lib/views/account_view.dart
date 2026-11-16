@@ -32,7 +32,8 @@ class _AccountViewState extends State<AccountView> {
     'navidrome': 2,
     'netease': 1,
     'qqmusic': 1,
-    'kugou': 1
+    'kugou': 1,
+    'qishui': 1
   };
 
   @override

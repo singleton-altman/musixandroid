@@ -181,6 +181,7 @@ class MX {
     'netease',
     'qqmusic',
     'kugou',
+    'qishui',
     'youtube',
     'source',
     'lx'
@@ -200,6 +201,8 @@ class MX {
         return 'QQ音乐';
       case 'kugou':
         return '酷狗';
+      case 'qishui':
+        return '汽水音乐';
       case 'apple':
         return 'Apple Music';
       case 'youtube':
@@ -249,6 +252,14 @@ class MX {
       case '酷狗':
       case 'kg':
         return 'kugou';
+      case 'qishui':
+      case 'qishui music':
+      case 'soda':
+      case '汽水':
+      case '汽水音乐':
+      case '汽水乐':
+      case 'qs':
+        return 'qishui';
       case 'apple':
       case 'apple music':
       case 'applemusic':
@@ -379,6 +390,8 @@ class MX {
         return const Color.fromRGBO(48, 194, 125, 1);
       case 'kugou':
         return const Color.fromRGBO(31, 156, 255, 1);
+      case 'qishui':
+        return const Color.fromRGBO(0, 209, 190, 1);
       case 'apple':
         return const Color.fromRGBO(250, 46, 71, 1);
       case 'youtube':
@@ -406,6 +419,8 @@ class MX {
         return Icons.music_note;
       case 'kugou':
         return Icons.music_note_outlined; // music.quarternote.3
+      case 'qishui':
+        return Icons.local_drink; // 汽水：杯装气泡饮
       case 'apple':
         return Icons.apple; // apple.logo
       case 'youtube':
