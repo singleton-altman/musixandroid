@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
+import 'release_channel.dart';
 import 'release_notes.dart';
 import 'update_mirror.dart';
 
@@ -22,8 +23,10 @@ import 'update_mirror.dart';
 class AppUpdateService {
   AppUpdateService._();
 
-  static const _repo = 'singleton-altman/musixandroid';
-  static const _apiBase = 'https://api.github.com/repos/$_repo/releases/latest';
+  /// 发布仓库：源码仓库转私有后由 CI 的 `--dart-define=RELEASE_REPO` 指向
+  /// 公开的发布仓库，见 `release_channel.dart`。
+  static const _repo = kReleaseRepo;
+  static const _apiBase = kLatestReleaseApi;
 
   /// Downloaded APKs older than this are pruned on the next update.
   static const Duration cachedApkTtl = Duration(days: 7);

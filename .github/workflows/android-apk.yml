@@ -16,6 +16,14 @@ concurrency:
   group: android-apk-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # 发布仓库：源码仓库转私有后，把仓库变量 RELEASE_REPO 设成公开仓库
+  # （如 singleton-altman/musix-releases）即可，APK 和 Release 会发到那边。
+  # 不设则留空，仍然发布到当前仓库。
+  RELEASE_REPO: ${{ vars.RELEASE_REPO || github.repository }}
+  # 发布仓库里的目标分支，Release 的标签会指向它（仓库至少要有一个提交）。
+  RELEASE_TARGET: ${{ vars.RELEASE_TARGET || 'main' }}
+
 jobs:
   build-apk:
     runs-on: ubuntu-latest
@@ -103,6 +111,7 @@ jobs:
           --build-name="$APP_BUILD_NAME"
           --build-number="$APP_BUILD_NUMBER"
           --dart-define="APP_DISPLAY_VERSION=$APP_DISPLAY_VERSION"
+          --dart-define="RELEASE_REPO=$RELEASE_REPO"
 
       - name: Verify release signing certificate
         id: verify-signing
@@ -146,8 +155,27 @@ jobs:
         if: github.event_name == 'push'
         uses: softprops/action-gh-release@v2
         with:
+          # 发到发布仓库；RELEASE_REPO 未配置时就是当前仓库，行为与以前一致。
+          repository: ${{ env.RELEASE_REPO }}
+          # 跨仓库发布需要 PAT（contents: write）；同仓库时回落到内置令牌。
+          token: ${{ secrets.RELEASE_REPO_TOKEN || github.token }}
+          target_commitish: ${{ env.RELEASE_TARGET }}
           tag_name: ${{ env.APP_BUILD_TAG }}
           name: MusicX ${{ env.APP_DISPLAY_VERSION }}
           body_path: ${{ runner.temp }}/release-notes.md
           files: build/app/outputs/flutter-apk/app-release.apk
           fail_on_unmatched_files: true
+
+      # 版本号里的 (NNN) 是按源码仓库里的 build-* 标签数出来的，所以即使
+      # Release 发到了别的仓库，本地标签也要补上，否则序号会一直停在 001。
+      - name: Tag build in source repo
+        if: github.event_name == 'push'
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/$APP_BUILD_TAG" >/dev/null 2>&1; then
+            echo "Tag $APP_BUILD_TAG already exists."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag "$APP_BUILD_TAG"
+          git push origin "refs/tags/$APP_BUILD_TAG"

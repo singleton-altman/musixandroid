@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import 'release_channel.dart';
 import 'update_mirror.dart';
 
 /// 单个下载线路的测速结果。
@@ -45,8 +46,10 @@ class UpdateSpeedTester {
   static const int maxBytes = 8 * 1024 * 1024;
 
   /// 没有 APK 地址时的测速目标，保证测的仍是同一条 GitHub 下载链路。
-  static const String fallbackProbeUrl =
-      'https://github.com/singleton-altman/musixandroid/archive/refs/heads/main.zip';
+  ///
+  /// 用最新 APK 的直链而不是源码 zip：源码仓库转私有后 zip 会 404，
+  /// 而 Release 资产是公开的，体积也远超测速窗口，样本更真实。
+  static const String fallbackProbeUrl = kLatestApkUrl;
 
   static Future<MirrorSpeedResult> test(
     UpdateMirror mirror, {
