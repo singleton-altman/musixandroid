@@ -8,13 +8,13 @@
 
 Your music lives on your own disk. The interface stays in your hands.
 
-[![Release](https://img.shields.io/github/v/release/singleton-altman/musixandroid?style=flat-square&color=7C6CFF&label=release)](https://github.com/singleton-altman/musixandroid/releases/latest)
+[![Release](https://img.shields.io/github/v/release/xijin285/MusicXApp?style=flat-square&color=7C6CFF&label=release)](https://github.com/xijin285/MusicXApp/releases/latest)
 [![Stars](https://img.shields.io/github/stars/singleton-altman/musixandroid?style=flat-square&color=7C6CFF)](https://github.com/singleton-altman/musixandroid/stargazers)
 [![Last Commit](https://img.shields.io/github/last-commit/singleton-altman/musixandroid?style=flat-square&color=7C6CFF)](https://github.com/singleton-altman/musixandroid/commits/main)
 [![Flutter](https://img.shields.io/badge/Flutter-3.47.4-54C5F8?style=flat-square&logo=flutter&logoColor=white)](https://flutter.dev)
 [![Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84?style=flat-square&logo=android&logoColor=white)](#requirements)
 
-[**Download APK**](https://github.com/singleton-altman/musixandroid/releases/latest)　·　[Quick start](#quick-start)　·　[Issues](https://github.com/singleton-altman/musixandroid/issues)　·　[Architecture](#architecture)　·　**English** / [中文](README.zh-CN.md)
+[**Download APK**](https://github.com/xijin285/MusicXApp/releases/latest)　·　[Quick start](#quick-start)　·　[Issues](https://github.com/singleton-altman/musixandroid/issues)　·　[Architecture](#architecture)　·　**English** / [中文](README.zh-CN.md)
 
 </div>
 
@@ -31,7 +31,7 @@ The server runs on your own computer, NAS or VPS, and the music sits on your own
 |  | What to do | Details |
 | :-: | --- | --- |
 | **1** | Start your music server | Needs a Musix Hub compatible REST API running on your own device |
-| **2** | Download and install the APK | Grab the latest from [Releases](https://github.com/singleton-altman/musixandroid/releases/latest), Android 8.0 or newer |
+| **2** | Download and install the APK | Grab the latest from [Releases](https://github.com/xijin285/MusicXApp/releases/latest), Android 8.0 or newer |
 | **3** | Enter address and password | Open the app, type the server address, and the library starts syncing once you sign in |
 
 ## Requirements

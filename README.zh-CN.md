@@ -8,13 +8,13 @@
 
 歌在自己的硬盘里，界面在自己手里。
 
-[![Release](https://img.shields.io/github/v/release/singleton-altman/musixandroid?style=flat-square&color=7C6CFF&label=release)](https://github.com/singleton-altman/musixandroid/releases/latest)
+[![Release](https://img.shields.io/github/v/release/xijin285/MusicXApp?style=flat-square&color=7C6CFF&label=release)](https://github.com/xijin285/MusicXApp/releases/latest)
 [![Stars](https://img.shields.io/github/stars/singleton-altman/musixandroid?style=flat-square&color=7C6CFF)](https://github.com/singleton-altman/musixandroid/stargazers)
 [![Last Commit](https://img.shields.io/github/last-commit/singleton-altman/musixandroid?style=flat-square&color=7C6CFF)](https://github.com/singleton-altman/musixandroid/commits/main)
 [![Flutter](https://img.shields.io/badge/Flutter-3.47.4-54C5F8?style=flat-square&logo=flutter&logoColor=white)](https://flutter.dev)
 [![Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84?style=flat-square&logo=android&logoColor=white)](#环境要求)
 
-[**下载 APK**](https://github.com/singleton-altman/musixandroid/releases/latest)　·　[快速开始](#三步开始)　·　[反馈问题](https://github.com/singleton-altman/musixandroid/issues)　·　[技术架构](#技术架构)　·　**中文** / [English](README.md)
+[**下载 APK**](https://github.com/xijin285/MusicXApp/releases/latest)　·　[快速开始](#三步开始)　·　[反馈问题](https://github.com/singleton-altman/musixandroid/issues)　·　[技术架构](#技术架构)　·　**中文** / [English](README.md)
 
 </div>
 
@@ -31,7 +31,7 @@
 |  | 做什么 | 说明 |
 | :-: | --- | --- |
 | **1** | 启动音乐服务器 | 需要 Musix Hub 兼容的 REST API，跑在你自己的设备上 |
-| **2** | 下载并安装 APK | 从 [Releases](https://github.com/singleton-altman/musixandroid/releases/latest) 取最新版，Android 8.0 以上 |
+| **2** | 下载并安装 APK | 从 [Releases](https://github.com/xijin285/MusicXApp/releases/latest) 取最新版，Android 8.0 以上 |
 | **3** | 填入地址与密码 | 打开 App 输入服务器地址，登录后即开始同步曲库 |
 
 ## 环境要求
