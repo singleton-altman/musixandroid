@@ -17,9 +17,9 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # 发布仓库：源码仓库转私有后，把仓库变量 RELEASE_REPO 设成公开仓库
-  # （如 singleton-altman/musix-releases）即可，APK 和 Release 会发到那边。
-  # 不设则留空，仍然发布到当前仓库。
+  # 发布仓库：由仓库变量 RELEASE_REPO 决定（已配置为 xijin285/MusicXApp），
+  # APK 和 Release 通过 RELEASE_REPO_TOKEN 密钥发到那边；
+  # 变量未设置时回落为当前仓库。
   RELEASE_REPO: ${{ vars.RELEASE_REPO || github.repository }}
   # 发布仓库里的目标分支，Release 的标签会指向它（仓库至少要有一个提交）。
   RELEASE_TARGET: ${{ vars.RELEASE_TARGET || 'main' }}
