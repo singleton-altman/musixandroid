@@ -141,6 +141,7 @@ jobs:
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
 
+      # 发布只在 push 事件执行：手动 dispatch 仅出 artifact，不发 Release。
       - name: Generate release notes
         if: github.event_name == 'push'
         run: |
